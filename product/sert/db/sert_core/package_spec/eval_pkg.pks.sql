@@ -1,7 +1,7 @@
 --liquibase formatted sql
 
 --changeset mipotter:create_package_spec_sert_core.sert_core endDelimiter:/ runOnChange:true runAlways:false rollbackEndDelimiter:/
-create or replace package ${sert_core_schema}.sert_core.eval_pkg
+create or replace package ${sert_core_schema}.eval_pkg
 as
 
 function eval_criteria

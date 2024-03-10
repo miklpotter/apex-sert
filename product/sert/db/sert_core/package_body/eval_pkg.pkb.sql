@@ -1,7 +1,7 @@
 --liquibase formatted sql
 
 --changeset mipotter:create_package_body_sert_core.sert_core endDelimiter:/ runOnChange:true runAlways:false rollbackEndDelimiter:/
-create or replace package body ${sert_core_schema}.sert_core.eval_pkg
+create or replace package body ${sert_core_schema}.eval_pkg
 as
   g_log_key varchar2(10) := log_pkg.get_log_key;
   g_log_type varchar2(100) := 'EVAL';

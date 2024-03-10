@@ -1,7 +1,7 @@
 --liquibase formatted sql
 
 --changeset mipotter:create_package_body_sert_core.sert_core endDelimiter:/ runOnChange:true runAlways:false rollbackEndDelimiter:/
-create or replace package body ${sert_core_schema}.sert_core.log_pkg
+create or replace package body ${sert_core_schema}.log_pkg
 as
 
 ----------------------------------------------------------------------------------------------------------------------------

@@ -28,7 +28,7 @@
   <includeAll
     relativeToChangelogFile="true"
     errorIfMissingOrEmpty="false"
-    path="tables"
+    path="table"
   />
   <includeAll
     relativeToChangelogFile="true"
@@ -78,7 +78,7 @@
   <includeAll
     relativeToChangelogFile="true"
     errorIfMissingOrEmpty="false"
-    path="triggers"
+    path="trigger"
   />
   <includeAll
     relativeToChangelogFile="true"
