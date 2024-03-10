@@ -11,10 +11,9 @@
         file="sert_core/schema.xml"
     />
 
-    <!-- sv_sert_apex schema -->
-    <!-- <include
+    <include
         relativeToChangelogFile="true"
         file="sert_pub/schema.xml"
-    /> -->
+    />
 
 </databaseChangeLog>

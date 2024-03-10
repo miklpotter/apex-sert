@@ -1,4 +1,7 @@
-create or replace view sert_pub.exceptions_pub_v
+--liquibase formatted sql
+
+--changeset mipotter:create_view_sert_pub.exceptions_pub_v_1710066993250 endDelimiter:/ runOnChange:true runAlways:false rollbackEndDelimiter:/
+create or replace view ${sert_pub_schema}.exceptions_pub_v
 as
 select
    e.exception_id
@@ -23,5 +26,6 @@ select
   ,e.actioned_by
   ,e.actioned_on
 from
-  sert_core.exceptions_pub_v e
+  ${sert_core_schema}.exceptions_pub_v e
 /
+--rollback not required

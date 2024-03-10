@@ -1,4 +1,7 @@
-create or replace view sert_pub.eval_results_pub_v
+--liquibase formatted sql
+
+--changeset mipotter:create_view_sert_pub.eval_results_pub_v_1710066978219 endDelimiter:/ runOnChange:true runAlways:false rollbackEndDelimiter:/
+create or replace view ${sert_pub_schema}.eval_results_pub_v
 as
 select
    eval_result_id
@@ -40,5 +43,6 @@ select
   ,updated_by
   ,updated_on
 from
-   sert_core.eval_results_pub_v
+   ${sert_core_schema}.eval_results_pub_v
 /
+--rollback not required
