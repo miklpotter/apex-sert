@@ -1,8 +1,11 @@
-create or replace package body sert_core.log_pkg
+--liquibase formatted sql
+
+--changeset mipotter:create_package_body_sert_core.sert_core endDelimiter:/ runOnChange:true runAlways:false rollbackEndDelimiter:/
+create or replace package body ${sert_core_schema}.sert_core.log_pkg
 as
 
 ----------------------------------------------------------------------------------------------------------------------------
--- FUNCTION: G E T _ L O G _ K E Y
+-- FUNCTION: G E T  L O G  K E Y
 ----------------------------------------------------------------------------------------------------------------------------
 -- Returns a random 10-character code that can be used to group similar log entries together for easier troubleshooting
 ----------------------------------------------------------------------------------------------------------------------------
@@ -93,3 +96,4 @@ end error;
 ----------------------------------------------------------------------------------------------------------------------------
 end log_pkg;
 /
+--rollback not required

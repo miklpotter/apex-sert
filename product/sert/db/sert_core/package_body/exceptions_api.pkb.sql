@@ -1,13 +1,16 @@
-create or replace package body sert_core.exceptions_api
+--liquibase formatted sql
+
+--changeset mipotter:create_package_body_sert_core.sert_core endDelimiter:/ runOnChange:true runAlways:false rollbackEndDelimiter:/
+create or replace package body ${sert_core_schema}.sert_core.exceptions_api
 as
 ----------------------------------------------------------------------------------------------------------------------------
--- FUNCTION: S H O W _ E X C E P T I O N
+-- FUNCTION: S H O W  E X C E P T I O N
 ----------------------------------------------------------------------------------------------------------------------------
 -- Determines whether or not to show items/regions/buttons for an evaluation result based on the status
 ----------------------------------------------------------------------------------------------------------------------------
 function show_exception
   (
-  p_eval_result_id in number    
+  p_eval_result_id in number
   )
 return boolean
 is
@@ -32,13 +35,13 @@ end if;
 end show_exception;
 
 ----------------------------------------------------------------------------------------------------------------------------
--- FUNCTION: W I T H D R A W _ E X C E P T I O N
+-- FUNCTION: W I T H D R A W  E X C E P T I O N
 ----------------------------------------------------------------------------------------------------------------------------
 -- Withdraws an exception, stopping any workflows
 ----------------------------------------------------------------------------------------------------------------------------
 procedure withdraw_exception
   (
-  p_exception_id in number    
+  p_exception_id in number
   )
 is
 begin
@@ -48,13 +51,13 @@ delete from exceptions where exception_id = p_exception_id;
 end withdraw_exception;
 
 ----------------------------------------------------------------------------------------------------------------------------
--- PROCEDURE: A P P R O V E _ O R _ R E J E C T _ E X C E P T I O N
+-- PROCEDURE: A P P R O V E  O R  R E J E C T  E X C E P T I O N
 ----------------------------------------------------------------------------------------------------------------------------
 -- Either approve or reject an exception
 ----------------------------------------------------------------------------------------------------------------------------
 procedure approve_or_reject_exception
   (
-   p_exception_id in number  
+   p_exception_id in number
   ,p_result       in varchar2
   ,p_reason       in varchar2
   ,p_app_user     in varchar2
@@ -76,7 +79,7 @@ end approve_or_reject_exception;
 
 
 ----------------------------------------------------------------------------------------------------------------------------
--- PROCEDURE: A D D _ E X C E P T I O N
+-- PROCEDURE: A D D  E X C E P T I O N
 ----------------------------------------------------------------------------------------------------------------------------
 -- Adds a new exception
 ----------------------------------------------------------------------------------------------------------------------------
@@ -134,3 +137,4 @@ end add_exception;
 
 end exceptions_api;
 /
+--rollback not required

@@ -1,20 +1,23 @@
-create or replace package sert_core.exceptions_api
+--liquibase formatted sql
+
+--changeset mipotter:create_package_spec_sert_core.sert_core endDelimiter:/ runOnChange:true runAlways:false rollbackEndDelimiter:/
+create or replace package ${sert_core_schema}.sert_core.exceptions_api
 as
 
 function show_exception
   (
-  p_eval_result_id in number    
+  p_eval_result_id in number
   )
 return boolean;
 
 procedure withdraw_exception
   (
-  p_exception_id in number    
+  p_exception_id in number
   );
 
 procedure approve_or_reject_exception
   (
-   p_exception_id in number  
+   p_exception_id in number
   ,p_result       in varchar2
   ,p_reason       in varchar2
   ,p_app_user     in varchar2
@@ -37,3 +40,4 @@ procedure add_exception
 
 end exceptions_api;
 /
+--rollback not required

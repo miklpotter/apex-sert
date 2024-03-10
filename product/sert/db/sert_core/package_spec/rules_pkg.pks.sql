@@ -1,4 +1,7 @@
-create or replace package sert_core.rules_pkg
+--liquibase formatted sql
+
+--changeset mipotter:create_package_spec_sert_core.sert_core endDelimiter:/ runOnChange:true runAlways:false rollbackEndDelimiter:/
+create or replace package ${sert_core_schema}.sert_core.rules_pkg
 as
 
 procedure import
@@ -24,3 +27,4 @@ procedure copy_rule
 
 end rules_pkg;
 /
+--rollback not required

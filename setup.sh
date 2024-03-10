@@ -1,0 +1,1 @@
+export SERT_CORE_SCHEMA=`grep sert_core_schema sert.properties|sed 's/sert_core_schema\ *\=\ *//'`

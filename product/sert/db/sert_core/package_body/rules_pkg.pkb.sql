@@ -1,4 +1,7 @@
-create or replace package body sert_core.rules_pkg
+--liquibase formatted sql
+
+--changeset mipotter:create_package_body_sert_core.sert_core endDelimiter:/ runOnChange:true runAlways:false rollbackEndDelimiter:/
+create or replace package body ${sert_core_schema}.sert_core.rules_pkg
 as
   g_log_key varchar2(10) := log_pkg.get_log_key;
   g_log_type varchar2(100) := 'IMPORT';
@@ -203,7 +206,7 @@ apex_application.stop_apex_engine;
 end export;
 
 ----------------------------------------------------------------------------------------------------------------------------
--- PROCEDURE: A D D _ R U L E _ T O _ R U L E _ S E T S
+-- PROCEDURE: A D D  R U L E  T O  R U L E  S E T S
 ----------------------------------------------------------------------------------------------------------------------------
 -- Adds a rule to a rule set or sets
 ----------------------------------------------------------------------------------------------------------------------------
@@ -228,7 +231,7 @@ end loop;
 end add_rule_to_rule_set;
 
 ----------------------------------------------------------------------------------------------------------------------------
--- PROCEDURE: C O P Y _ R U L E
+-- PROCEDURE: C O P Y  R U L E
 ----------------------------------------------------------------------------------------------------------------------------
 -- Makes a copy of an existing rule
 ----------------------------------------------------------------------------------------------------------------------------
@@ -331,3 +334,4 @@ end copy_rule;
 ----------------------------------------------------------------------------------------------------------------------------
 end rules_pkg;
 /
+--rollback not required

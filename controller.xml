@@ -1,0 +1,77 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+        xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xmlns:ora="http://www.oracle.com/xml/ns/dbchangelog-ext"
+        xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-4.17.xsd"
+>
+
+
+    <!-- SERT property file with parameters -->
+    <property  file="sert.properties" contextFilter="standalone" />
+
+
+    <preConditions  onFail="HALT">
+            <sqlCheck  expectedResult="0">select count(workspace) from apex_applications where upper(alias) = 'SERT' and upper(workspace) != upper('${sert_apex_workspace}')</sqlCheck>
+    </preConditions>
+
+
+    <!-- Continue with the sert install
+         using the SERT schema -->
+    <changeSet
+        id="set_session_current_schema_to_target"
+        author="tschafer"
+        runOnChange="true"
+        runAlways="true"
+        contextFilter="sdk"
+    >
+        <sql>
+            alter session set current_schema = ${sert_core_schema};
+        </sql>
+        <rollback></rollback>
+    </changeSet>
+
+
+    <!-- include SERT database scripts -->
+    <include
+        relativeToChangelogFile="true"
+        file="product/sert/db/controller.xml"
+    />
+
+    <!-- include APEX apps and scripts -->
+    <!-- <include
+        relativeToChangelogFile="true"
+        file="product/sert/apex/controller.xml"
+    /> -->
+
+    <!--
+    == Post Installation output in a changeset so it only displays
+    -->
+    <changeSet
+        id="Post_Installation"
+        author="mipotter"
+        runOnChange="true"
+        runAlways="true"
+        contextFilter="standalone"
+    >
+      <output  target="STDERR">=============================================================================</output>
+      <output  target="STDERR">== P O S T   I N S T A L L A T I O N   S T E P S</output>
+      <output  target="STDERR">== </output>
+      <output  target="STDERR">== In order to be able to launch APEX-SERT, paste the following into the System Message</output>
+      <output  target="STDERR">== region in the INTERNAL workspace:</output>
+      <output  target="STDERR">== </output>
+      <output  target="STDERR">   &lt;span style=&quot;font-size: 16px; color: #C74634; font-weight: 700;&quot;&gt;SERT&lt;/span&gt; &lt;/br&gt;</output>
+      <output  target="STDERR">   &lt;a href=&quot;javascript:var launchTOWER=window.open('f?p=SERT:101:::::P101_USERNAME,P101_PASSWORD:' + encodeURIComponent(apex.env.APP_USER) + ',' + apex.env.APP_SESSION);&quot;&gt;&lt;span class=&quot;a-Icon icon-run-page&quot;&gt;&lt;/span&gt; Launch APEX-SERT&lt;/a&gt;</output>
+      <output  target="STDERR">== </output>
+      <output  target="STDERR">== To access the APEX-SERT Admin application, enter the following URL while</output>
+      <output  target="STDERR">== substituting HOST, PORT and DAD with those from your APEX environment:</output>
+      <output  target="STDERR">== </output>
+      <output  target="STDERR">   http(s)://HOST:PORT/DAD/f?p=SERT_ADMIN</output>
+      <output  target="STDERR">== </output>
+      <output  target="STDERR">== Please see the APEX-SERT Installation Guide for detailed post-installation steps.</output>
+      <output  target="STDERR">=============================================================================</output>
+
+    </changeSet>
+
+
+</databaseChangeLog>

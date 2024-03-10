@@ -1,10 +1,13 @@
-create or replace package body sert_core.eval_pkg
+--liquibase formatted sql
+
+--changeset mipotter:create_package_body_sert_core.sert_core endDelimiter:/ runOnChange:true runAlways:false rollbackEndDelimiter:/
+create or replace package body ${sert_core_schema}.sert_core.eval_pkg
 as
   g_log_key varchar2(10) := log_pkg.get_log_key;
   g_log_type varchar2(100) := 'EVAL';
 
 ----------------------------------------------------------------------------------------------------------------------------
--- FUNCTION: E V A L _ C R I T E R I A
+-- FUNCTION: E V A L  C R I T E R I A
 ----------------------------------------------------------------------------------------------------------------------------
 -- Evaluates a column for a specific criteria
 ----------------------------------------------------------------------------------------------------------------------------
@@ -67,7 +70,7 @@ end eval_criteria;
 
 
 ----------------------------------------------------------------------------------------------------------------------------
--- PROCEDURE: P R O C E S S _ R U L E S
+-- PROCEDURE: P R O C E S S  R U L E S
 ----------------------------------------------------------------------------------------------------------------------------
 -- Process all rules for a specific evaluation
 ----------------------------------------------------------------------------------------------------------------------------
@@ -128,7 +131,7 @@ open l_cursor;
         ' ,null as item_name '
       end
 
-      -- display the shared component name 
+      -- display the shared component name
       || ' ,' || case when l_row.impact = 'SC' then nvl(replace(l_row.shared_comp_name, ':', ' || '' / '' || '), ' null') || ' as shared_comp_name ' else ' null as shared_comp_name ' end
 
       -- display the current value of the column being investigated
@@ -256,8 +259,8 @@ where
   || er.component_id    || ':'
   || er.item_name       || ':'
   || er.column_name     || ':'
-  || er.shared_comp_name 
-  = 
+  || er.shared_comp_name
+  =
      e.rule_set_id     || ':'
   || e.rule_id         || ':'
   || e.workspace_id    || ':'
@@ -266,7 +269,7 @@ where
   || e.component_id    || ':'
   || e.item_name       || ':'
   || e.column_name     || ':'
-  || e.shared_comp_name 
+  || e.shared_comp_name
   and er.current_value != e.current_value
   and er.eval_id = p_eval_id
   );
@@ -418,7 +421,7 @@ end eval;
 
 
 ----------------------------------------------------------------------------------------------------------------------------
--- PROCEDURE: D E L E T E _ E V A L
+-- PROCEDURE: D E L E T E  E V A L
 ----------------------------------------------------------------------------------------------------------------------------
 -- Delete an evaluation
 ----------------------------------------------------------------------------------------------------------------------------
@@ -448,3 +451,4 @@ end delete_eval;
 ----------------------------------------------------------------------------------------------------------------------------
 end eval_pkg;
 /
+--rollback not required

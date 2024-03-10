@@ -1,4 +1,7 @@
-create or replace package sert_core.log_pkg
+--liquibase formatted sql
+
+--changeset mipotter:create_package_spec_sert_core.sert_core endDelimiter:/ runOnChange:true runAlways:false rollbackEndDelimiter:/
+create or replace package ${sert_core_schema}.sert_core.log_pkg
 as
 
 function get_log_key
@@ -22,3 +25,4 @@ return apex_error.t_error_result;
 
 end log_pkg;
 /
+--rollback not required

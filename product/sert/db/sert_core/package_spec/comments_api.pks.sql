@@ -1,4 +1,7 @@
-create or replace package comments_api
+--liquibase formatted sql
+
+--changeset mipotter:create_package_spec_sert_core.comments_api endDelimiter:/ runOnChange:true runAlways:false rollbackEndDelimiter:/
+create or replace package ${sert_core_schema}.comments_api
 as
 
 procedure add_comment
@@ -23,3 +26,4 @@ procedure delete_comment
 
 end comments_api;
 /
+--rollback not required
