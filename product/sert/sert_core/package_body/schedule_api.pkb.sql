@@ -771,8 +771,9 @@ begin
 
         -- Log successful queue
         sert_core.log_pkg.log(
-          p_message => 'Auto-scan queued for application ' || r_app.application_id || ' (eval_id=' || l_eval_id || ')',
-          p_log_level => 'INFO'
+          p_log            => 'Auto-scan queued for application ' || r_app.application_id || ' (eval_id=' || l_eval_id || ')',
+          p_application_id => r_app.application_id,
+          p_log_type       => 'EVAL'
         );
 
         l_app_count := l_app_count + 1;
@@ -780,9 +781,10 @@ begin
     exception
       when others then
         -- Log error but continue processing other apps
-        sert_core.log_pkg.error(
-          p_message => 'Failed to queue auto-scan for application ' || r_app.application_id || ': ' || sqlerrm,
-          p_log_level => 'ERROR'
+        sert_core.log_pkg.log(
+          p_log            => 'Failed to queue auto-scan for application ' || r_app.application_id || ': ' || sqlerrm,
+          p_application_id => r_app.application_id,
+          p_log_type       => 'UNHANDLED'
         );
     end;
   end loop;
