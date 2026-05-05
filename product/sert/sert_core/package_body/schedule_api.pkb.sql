@@ -755,39 +755,108 @@ is
 begin
   l_app_count := 0;
 
-  -- Loop through candidates and queue evaluations
-  for r_app in c_auto_scan_apps loop
-    begin
-      -- Call eval_pkg.eval to queue a background evaluation
-      declare
-        l_eval_id number;
+  begin
+    -- Try to fetch with Guardian activity data
+    for r_app in c_auto_scan_apps loop
       begin
-        sert_core.eval_pkg.eval(
-          p_application_id    => r_app.application_id,
-          p_rule_set_key      => 'INTERNAL',
-          p_run_in_background => 'Y',
-          p_eval_id_out       => l_eval_id
-        );
+        -- Call eval_pkg.eval to queue a background evaluation
+        declare
+          l_eval_id number;
+        begin
+          sert_core.eval_pkg.eval(
+            p_application_id    => r_app.application_id,
+            p_rule_set_key      => 'INTERNAL',
+            p_run_in_background => 'Y',
+            p_eval_id_out       => l_eval_id
+          );
 
-        -- Log successful queue
-        sert_core.log_pkg.log(
-          p_log            => 'Auto-scan queued for application ' || r_app.application_id || ' (eval_id=' || l_eval_id || ')',
-          p_application_id => r_app.application_id,
-          p_log_type       => 'EVAL'
-        );
+          -- Log successful queue
+          sert_core.log_pkg.log(
+            p_log            => 'Auto-scan queued for application ' || r_app.application_id || ' (eval_id=' || l_eval_id || ')',
+            p_application_id => r_app.application_id,
+            p_log_type       => 'EVAL'
+          );
 
-        l_app_count := l_app_count + 1;
+          l_app_count := l_app_count + 1;
+        end;
+      exception
+        when others then
+          -- Log error but continue processing other apps
+          sert_core.log_pkg.log(
+            p_log            => 'Failed to queue auto-scan for application ' || r_app.application_id || ': ' || sqlerrm,
+            p_application_id => r_app.application_id,
+            p_log_type       => 'UNHANDLED'
+          );
       end;
-    exception
-      when others then
-        -- Log error but continue processing other apps
+    end loop;
+  exception
+    when others then
+      -- Guardian table missing or query failed; fall back to eval_on_date ordering
+      if sqlcode = -942 or instr(sqlerrm, 'sg_most_4wk_app_activity_f') > 0 then
         sert_core.log_pkg.log(
-          p_log            => 'Failed to queue auto-scan for application ' || r_app.application_id || ': ' || sqlerrm,
-          p_application_id => r_app.application_id,
-          p_log_type       => 'UNHANDLED'
+          p_log      => 'Guardian activity table unavailable; using eval_on_date fallback',
+          p_log_type => 'WARNING'
         );
-    end;
-  end loop;
+
+        -- Fallback cursor (no Guardian join)
+        for r_app in (
+          with stale_apps as (
+            select e.application_id, e.workspace_id, e.eval_on_date
+              from sert_core.evals_pub_v e
+             where e.job_status = 'Stale'
+          )
+          , unscanned_apps as (
+            select distinct a.application_id, a.workspace_id, null as eval_on_date
+              from apex_applications a
+             where not exists (
+                   select 1 from sert_core.evals where application_id = a.application_id
+                 )
+          )
+          select application_id, workspace_id, eval_on_date
+            from (
+              select * from stale_apps
+              union all
+              select * from unscanned_apps
+            )
+           order by eval_on_date desc nulls first
+           fetch first l_batch_size rows only
+        ) loop
+          begin
+            -- Call eval_pkg.eval to queue a background evaluation
+            declare
+              l_eval_id number;
+            begin
+              sert_core.eval_pkg.eval(
+                p_application_id    => r_app.application_id,
+                p_rule_set_key      => 'INTERNAL',
+                p_run_in_background => 'Y',
+                p_eval_id_out       => l_eval_id
+              );
+
+              -- Log successful queue
+              sert_core.log_pkg.log(
+                p_log            => 'Auto-scan queued for application ' || r_app.application_id || ' (eval_id=' || l_eval_id || ')',
+                p_application_id => r_app.application_id,
+                p_log_type       => 'EVAL'
+              );
+
+              l_app_count := l_app_count + 1;
+            end;
+          exception
+            when others then
+              -- Log error but continue processing other apps
+              sert_core.log_pkg.log(
+                p_log            => 'Failed to queue auto-scan for application ' || r_app.application_id || ': ' || sqlerrm,
+                p_application_id => r_app.application_id,
+                p_log_type       => 'UNHANDLED'
+              );
+          end;
+        end loop;
+      else
+        -- Different error; re-raise
+        raise;
+      end if;
+  end;
 
   p_app_count_out := l_app_count;
 
