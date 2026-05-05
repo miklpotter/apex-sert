@@ -755,10 +755,36 @@ is
 begin
   l_app_count := 0;
 
-  -- Loop through candidates (will be enhanced in Task 4 with eval calls)
+  -- Loop through candidates and queue evaluations
   for r_app in c_auto_scan_apps loop
-    -- Task 3: Just count; Task 4 will add eval_pkg.eval() call
-    l_app_count := l_app_count + 1;
+    begin
+      -- Call eval_pkg.eval to queue a background evaluation
+      declare
+        l_eval_id number;
+      begin
+        sert_core.eval_pkg.eval(
+          p_application_id    => r_app.application_id,
+          p_rule_set_key      => 'INTERNAL',
+          p_run_in_background => 'Y',
+          p_eval_id_out       => l_eval_id
+        );
+
+        -- Log successful queue
+        sert_core.log_pkg.log(
+          p_message => 'Auto-scan queued for application ' || r_app.application_id || ' (eval_id=' || l_eval_id || ')',
+          p_log_level => 'INFO'
+        );
+
+        l_app_count := l_app_count + 1;
+      end;
+    exception
+      when others then
+        -- Log error but continue processing other apps
+        sert_core.log_pkg.error(
+          p_message => 'Failed to queue auto-scan for application ' || r_app.application_id || ': ' || sqlerrm,
+          p_log_level => 'ERROR'
+        );
+    end;
   end loop;
 
   p_app_count_out := l_app_count;
