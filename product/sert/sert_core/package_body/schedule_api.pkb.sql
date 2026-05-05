@@ -691,6 +691,80 @@ exception
       raise_application_error(-20000, dbms_utility.format_error_backtrace);
 end process_eval_summary_results;
 
+----------------------------------------------------------------------------------------------------------------------------
+-- PROCEDURE: Q U E U E _ A U T O _ S C A N S
+----------------------------------------------------------------------------------------------------------------------------
+-- Finds stale and unscanned applications, ranks by Guardian activity, and queues for evaluation
+----------------------------------------------------------------------------------------------------------------------------
+-- queue_auto_scans
+-- purpose: identify and queue applications needing security evaluation based on staleness and scan status.
+-- behavior: queries stale evaluations and unscanned applications, ranks by Guardian page activity with eval date
+--   fallback, and returns the count of applications queued for processing.
+-- parameters:
+--   p_batch_size     - maximum number of applications to return per call; default 20.
+--   p_app_count_out  - output count of applications identified for queuing.
+-- usage:
+--   sert_core.schedule_api.queue_auto_scans(
+--      p_batch_size    => 20,
+--      p_app_count_out => l_app_count
+--   );
+-- notes:
+--   - Stale apps: evals where job_status = 'Stale' (eval_on_date < app last_updated_on)
+--   - Unscanned apps: applications with no entry in sert_core.evals
+--   - Guardian ranking: left join to sg_most_4wk_app_activity_f on (workspace_id, application_id)
+--   - Fallback ranking: eval_on_date desc nulls first (unscanned apps come first due to NULL)
+----------------------------------------------------------------------------------------------------------------------------
+procedure queue_auto_scans
+(
+  p_batch_size     in number default 20,
+  p_app_count_out  out number
+)
+is
+  l_batch_size number := p_batch_size;
+  l_app_count  number := 0;
+
+  cursor c_auto_scan_apps is
+    with stale_apps as (
+      -- Apps marked as 'Stale' in evals_pub_v
+      select e.application_id, e.workspace_id, e.eval_on_date
+        from sert_core.evals_pub_v e
+       where e.job_status = 'Stale'
+    )
+    , unscanned_apps as (
+      -- Apps in APEX instance with no evals
+      select distinct a.application_id, a.workspace_id, null as eval_on_date
+        from apex_applications a
+       where not exists (
+             select 1 from sert_core.evals where application_id = a.application_id
+           )
+    )
+    , all_candidates as (
+      select * from stale_apps
+      union all
+      select * from unscanned_apps
+    )
+    select a.application_id, a.workspace_id
+      from all_candidates a
+      left join sert_core.sg_most_4wk_app_activity_f g
+        on a.workspace_id = g.workspace_id
+       and a.application_id = g.application_id
+     order by coalesce(g.page_events, 0) desc,
+              a.eval_on_date desc nulls first
+     fetch first l_batch_size rows only;
+
+begin
+  l_app_count := 0;
+
+  -- Loop through candidates (will be enhanced in Task 4 with eval calls)
+  for r_app in c_auto_scan_apps loop
+    -- Task 3: Just count; Task 4 will add eval_pkg.eval() call
+    l_app_count := l_app_count + 1;
+  end loop;
+
+  p_app_count_out := l_app_count;
+
+end queue_auto_scans;
+
 
 ----------------------------------------------------------------------------------------------------------------------------
 ----------------------------------------------------------------------------------------------------------------------------

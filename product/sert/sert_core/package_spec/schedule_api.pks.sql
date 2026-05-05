@@ -141,6 +141,28 @@ procedure process_eval_summary_results (
   p_application_id_list in varchar2,
   p_result out clob);
 
+----------------------------------------------------------------------------------------------------------------------------
+-- PROCEDURE: Q U E U E _ A U T O _ S C A N S
+----------------------------------------------------------------------------------------------------------------------------
+-- Finds stale and unscanned applications, ranks by Guardian activity, and queues for evaluation
+----------------------------------------------------------------------------------------------------------------------------
+-- queue_auto_scans
+-- purpose: identify and queue applications needing security evaluation based on staleness and scan status.
+-- behavior: queries stale evaluations and unscanned applications, ranks by Guardian page activity with eval date
+--   fallback, and returns the count of applications queued for processing.
+-- parameters:
+--   p_batch_size     - maximum number of applications to return per call; default 20.
+--   p_app_count_out  - output count of applications identified for queuing.
+-- usage:
+--   sert_core.schedule_api.queue_auto_scans(
+--      p_batch_size    => 20,
+--      p_app_count_out => l_app_count
+--   );
+----------------------------------------------------------------------------------------------------------------------------
+procedure queue_auto_scans (
+  p_batch_size     in number default 20,
+  p_app_count_out  out number);
+
 end schedule_api;
 /
 --rollback not required
