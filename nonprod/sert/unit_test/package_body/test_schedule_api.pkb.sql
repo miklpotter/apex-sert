@@ -83,8 +83,12 @@ is
     l_eval_id       number;
     l_rule_set_id   number;
 begin
+    -- Precondition: at least one rule set must exist
+    ut.expect((select count(*) from sert_core.rule_sets where rule_set_id > 0))
+        .to_be_greater_than(0);
+
     -- Get first available rule_set_id
-    select min(rule_set_id) into l_rule_set_id from sert_core.rule_sets;
+    select min(rule_set_id) into l_rule_set_id from sert_core.rule_sets where rule_set_id > 0;
 
     insert into sert_core.evals (
         workspace_id,
@@ -314,18 +318,16 @@ end guardian_fallback;
 
 ------------------------------------------------------------
 -- error_handling
--- Tests: error handling during queueing continues on failure
+-- Tests: procedure queues apps successfully and handles edge cases
 -- Setup: Create test workspace with 5 unscanned apps
--- Execute: Call queue_auto_scans (may encounter errors during eval)
--- Assert: l_count >= 4 (at least 4 succeeded despite potential failures)
---         Or error handling prevents exceptions from bubbling up
+-- Execute: Call queue_auto_scans (procedure handles errors internally)
+-- Assert: All 5 apps are queued successfully (count = 5)
 ------------------------------------------------------------
 procedure error_handling
 as
     l_count         number := 0;
     l_workspace_id  number;
     l_base_app_id   number;
-    l_error_raised  boolean := false;
 begin
     -- Setup: Create test workspace with 5 unscanned apps
     l_workspace_id := setup_test_workspace;
@@ -339,29 +341,13 @@ begin
     end loop;
 
     -- Execute: Call queue_auto_scans
-    -- Note: eval_pkg.eval() may fail if procedure doesn't exist yet,
-    -- but error handling should continue and count successful queues
-    begin
-        sert_core.schedule_api.queue_auto_scans(
-            p_batch_size => 20,
-            p_app_count_out => l_count);
-    exception
-        when others then
-            -- Error handling test: procedure should not raise,
-            -- but if it does, we capture it for the assertion
-            l_error_raised := true;
-            l_count := 0;
-    end;
+    -- The procedure should handle any internal errors gracefully
+    sert_core.schedule_api.queue_auto_scans(
+        p_batch_size => 20,
+        p_app_count_out => l_count);
 
-    -- Assert: Either procedure succeeded and returned count >= 4,
-    -- or it raised an exception (which is also valid error handling).
-    -- If no error was raised, at least 4 apps should have been queued.
-    if not l_error_raised then
-        ut.expect(l_count).to_be_greater_than_or_equal(4);
-    else
-        -- If exception was raised, that's acceptable for error handling test
-        ut.expect(l_error_raised).to_be_true;
-    end if;
+    -- Assert: All 5 apps should be queued successfully
+    ut.expect(l_count).to_equal(5);
 
     -- Cleanup: Rollback test data
     rollback;
