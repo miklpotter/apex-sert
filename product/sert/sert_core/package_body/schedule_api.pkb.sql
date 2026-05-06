@@ -698,53 +698,49 @@ end process_eval_summary_results;
 ----------------------------------------------------------------------------------------------------------------------------
 -- queue_auto_scans
 -- purpose: identify and queue applications needing security evaluation based on staleness and scan status.
--- behavior: queries stale evaluations and unscanned applications, ranks by Guardian page activity with eval date
---   fallback, and returns the count of applications queued for processing.
+-- behavior: reads AUTO_SCAN, AUTO_SCAN_BATCH_SIZE, and AUTO_SCAN_IGNORE_WS preferences at runtime;
+--   exits early when AUTO_SCAN='N'; excludes apps in ignored workspaces; ranks by Guardian page activity
+--   with eval_on_date fallback when Guardian is unavailable.
 -- parameters:
---   p_batch_size     - maximum number of applications to return per call; default 20.
---   p_app_count_out  - output count of applications identified for queuing.
+--   p_batch_size     - maximum apps to queue; null reads AUTO_SCAN_BATCH_SIZE pref (default 10).
+--   p_app_count_out  - output count of applications successfully queued.
 -- usage:
---   sert_core.schedule_api.queue_auto_scans(
---      p_batch_size    => 20,
---      p_app_count_out => l_app_count
---   );
--- notes:
---   - Stale apps: evals where job_status = 'Stale' (eval_on_date < app last_updated_on)
---   - Unscanned apps: applications with no entry in sert_core.evals
---   - Guardian ranking: left join to sg_most_4wk_app_activity_f on (workspace_id, application_id)
---   - Fallback ranking: eval_on_date desc nulls first (unscanned apps come first due to NULL)
+--   sert_core.schedule_api.queue_auto_scans(p_app_count_out => l_app_count);
 ----------------------------------------------------------------------------------------------------------------------------
 procedure queue_auto_scans
 (
-  p_batch_size     in number default 20,
+  p_batch_size     in number default null,
   p_app_count_out  out number
 )
 is
-  l_batch_size number := p_batch_size;
-  l_app_count  number := 0;
+  l_batch_size  number;
+  l_ignore_ws   varchar2(4000);
+  l_app_count   number := 0;
 
   cursor c_auto_scan_apps is
     with stale_apps as (
-      -- Apps marked as 'Stale' in evals_pub_v
       select e.application_id, e.workspace_id, e.eval_on_date
         from sert_core.evals_pub_v e
        where e.job_status = 'Stale'
+         and not exists (
+               select 1
+                 from table(apex_string.split(l_ignore_ws, ','))
+                where column_value is not null
+                  and upper(trim(column_value)) = upper(e.workspace))
     )
     , unscanned_apps as (
-      -- Apps in APEX instance with no evals
       select distinct a.application_id, a.workspace_id, null as eval_on_date
         from apex_applications a
        where not exists (
-             select 1 from sert_core.evals where application_id = a.application_id
-           )
-    )
-    , all_candidates as (
-      select * from stale_apps
-      union all
-      select * from unscanned_apps
+               select 1 from sert_core.evals where application_id = a.application_id)
+         and not exists (
+               select 1
+                 from table(apex_string.split(l_ignore_ws, ','))
+                where column_value is not null
+                  and upper(trim(column_value)) = upper(a.workspace))
     )
     select a.application_id, a.workspace_id
-      from all_candidates a
+      from (select * from stale_apps union all select * from unscanned_apps) a
       left join sert_core.sg_most_4wk_app_activity_f g
         on a.workspace_id = g.workspace_id
        and a.application_id = g.application_id
@@ -753,13 +749,34 @@ is
      fetch first l_batch_size rows only;
 
 begin
-  l_app_count := 0;
+  -- Early exit when auto-scan is disabled
+  if upper(sert_core.prefs_api.pref_value('AUTO_SCAN')) = 'N' then
+    sert_core.log_pkg.log(
+      p_log      => 'Auto-scan skipped: AUTO_SCAN preference is N',
+      p_log_type => 'INFO');
+    p_app_count_out := 0;
+    return;
+  end if;
+
+  -- Explicit param wins; otherwise read pref, default 10 on missing/non-numeric value
+  if p_batch_size is not null then
+    l_batch_size := p_batch_size;
+  else
+    begin
+      l_batch_size := to_number(sert_core.prefs_api.pref_value('AUTO_SCAN_BATCH_SIZE'));
+    exception
+      when others then
+        l_batch_size := 10;
+    end;
+    l_batch_size := nvl(l_batch_size, 10);
+  end if;
+
+  -- Empty/null pref means no exclusions; apex_string.split handles null gracefully
+  l_ignore_ws := sert_core.prefs_api.pref_value('AUTO_SCAN_IGNORE_WS');
 
   begin
-    -- Try to fetch with Guardian activity data
     for r_app in c_auto_scan_apps loop
       begin
-        -- Call eval_pkg.eval to queue a background evaluation
         declare
           l_eval_id number;
         begin
@@ -769,19 +786,15 @@ begin
             p_run_in_background => 'Y',
             p_eval_id_out       => l_eval_id
           );
-
-          -- Log successful queue
           sert_core.log_pkg.log(
             p_log            => 'Auto-scan queued for application ' || r_app.application_id || ' (eval_id=' || l_eval_id || ')',
             p_application_id => r_app.application_id,
             p_log_type       => 'EVAL'
           );
-
           l_app_count := l_app_count + 1;
         end;
       exception
         when others then
-          -- Log error but continue processing other apps
           sert_core.log_pkg.log(
             p_log            => 'Failed to queue auto-scan for application ' || r_app.application_id || ': ' || sqlerrm,
             p_application_id => r_app.application_id,
@@ -791,38 +804,40 @@ begin
     end loop;
   exception
     when others then
-      -- Guardian table missing or query failed; fall back to eval_on_date ordering
+      -- Guardian table unavailable; fall back to eval_on_date ordering
       if sqlcode = -942 or instr(sqlerrm, 'sg_most_4wk_app_activity_f') > 0 then
         sert_core.log_pkg.log(
           p_log      => 'Guardian activity table unavailable; using eval_on_date fallback',
           p_log_type => 'WARNING'
         );
-
-        -- Fallback cursor (no Guardian join)
         for r_app in (
           with stale_apps as (
             select e.application_id, e.workspace_id, e.eval_on_date
               from sert_core.evals_pub_v e
              where e.job_status = 'Stale'
+               and not exists (
+                     select 1
+                       from table(apex_string.split(l_ignore_ws, ','))
+                      where column_value is not null
+                        and upper(trim(column_value)) = upper(e.workspace))
           )
           , unscanned_apps as (
             select distinct a.application_id, a.workspace_id, null as eval_on_date
               from apex_applications a
              where not exists (
-                   select 1 from sert_core.evals where application_id = a.application_id
-                 )
+                     select 1 from sert_core.evals where application_id = a.application_id)
+               and not exists (
+                     select 1
+                       from table(apex_string.split(l_ignore_ws, ','))
+                      where column_value is not null
+                        and upper(trim(column_value)) = upper(a.workspace))
           )
           select application_id, workspace_id, eval_on_date
-            from (
-              select * from stale_apps
-              union all
-              select * from unscanned_apps
-            )
+            from (select * from stale_apps union all select * from unscanned_apps)
            order by eval_on_date desc nulls first
            fetch first l_batch_size rows only
         ) loop
           begin
-            -- Call eval_pkg.eval to queue a background evaluation
             declare
               l_eval_id number;
             begin
@@ -832,19 +847,15 @@ begin
                 p_run_in_background => 'Y',
                 p_eval_id_out       => l_eval_id
               );
-
-              -- Log successful queue
               sert_core.log_pkg.log(
                 p_log            => 'Auto-scan queued for application ' || r_app.application_id || ' (eval_id=' || l_eval_id || ')',
                 p_application_id => r_app.application_id,
                 p_log_type       => 'EVAL'
               );
-
               l_app_count := l_app_count + 1;
             end;
           exception
             when others then
-              -- Log error but continue processing other apps
               sert_core.log_pkg.log(
                 p_log            => 'Failed to queue auto-scan for application ' || r_app.application_id || ': ' || sqlerrm,
                 p_application_id => r_app.application_id,
@@ -853,7 +864,6 @@ begin
           end;
         end loop;
       else
-        -- Different error; re-raise
         raise;
       end if;
   end;
