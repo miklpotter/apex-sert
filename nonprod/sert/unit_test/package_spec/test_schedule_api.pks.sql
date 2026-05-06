@@ -31,15 +31,19 @@ as
    procedure error_handling;
 
    --%test(should_return_0_when_auto_scan_pref_is_N)
+   --%rollback(manual)
    procedure auto_scan_disabled;
 
    --%test(should_exclude_apps_in_ignored_workspace)
+   --%rollback(manual)
    procedure ignored_workspace_excluded;
 
    --%test(should_queue_batch_size_from_pref_when_no_param_supplied)
+   --%rollback(manual)
    procedure batch_size_from_pref;
 
    --%test(should_use_explicit_param_batch_size_over_pref)
+   --%rollback(manual)
    procedure param_overrides_pref_batch_size;
 
 end test_schedule_api;

@@ -713,15 +713,17 @@ procedure queue_auto_scans
   p_app_count_out  out number
 )
 is
-  l_batch_size  number;
-  l_ignore_ws   varchar2(4000);
-  l_app_count   number := 0;
+  l_batch_size   number;
+  l_ignore_ws    varchar2(4000);
+  l_rule_set_key rule_sets.rule_set_key%type;
+  l_app_count    number := 0;
 
   cursor c_auto_scan_apps is
     with stale_apps as (
       select e.application_id, e.workspace_id, e.eval_on_date
         from sert_core.evals_pub_v e
        where e.job_status = 'Stale'
+         and upper(e.workspace) not in ('INTERNAL', 'TOWER', 'COM.ORACLE.CUST.REPOSITORY')
          and not exists (
                select 1
                  from table(apex_string.split(l_ignore_ws, ','))
@@ -731,7 +733,8 @@ is
     , unscanned_apps as (
       select distinct a.application_id, a.workspace_id, null as eval_on_date
         from apex_applications a
-       where not exists (
+       where upper(a.workspace) not in ('INTERNAL', 'TOWER', 'COM.ORACLE.CUST.REPOSITORY')
+         and not exists (
                select 1 from sert_core.evals where application_id = a.application_id)
          and not exists (
                select 1
@@ -774,6 +777,13 @@ begin
   -- Empty/null pref means no exclusions; apex_string.split handles null gracefully
   l_ignore_ws := sert_core.prefs_api.pref_value('AUTO_SCAN_IGNORE_WS');
 
+  -- Resolve the active rule set for the current APEX version at runtime
+  select rule_set_key
+    into l_rule_set_key
+    from sert_core.rule_sets
+   where active_yn = 'Y'
+     and apex_version = (select apex_version from sert_core.apex_version_v);
+
   begin
     for r_app in c_auto_scan_apps loop
       begin
@@ -782,7 +792,7 @@ begin
         begin
           sert_core.eval_pkg.eval(
             p_application_id    => r_app.application_id,
-            p_rule_set_key      => 'INTERNAL',
+            p_rule_set_key      => l_rule_set_key,
             p_run_in_background => 'Y',
             p_eval_id_out       => l_eval_id
           );
@@ -815,6 +825,7 @@ begin
             select e.application_id, e.workspace_id, e.eval_on_date
               from sert_core.evals_pub_v e
              where e.job_status = 'Stale'
+               and upper(e.workspace) not in ('INTERNAL', 'TOWER', 'COM.ORACLE.CUST.REPOSITORY')
                and not exists (
                      select 1
                        from table(apex_string.split(l_ignore_ws, ','))
@@ -824,7 +835,8 @@ begin
           , unscanned_apps as (
             select distinct a.application_id, a.workspace_id, null as eval_on_date
               from apex_applications a
-             where not exists (
+             where upper(a.workspace) not in ('INTERNAL', 'TOWER', 'COM.ORACLE.CUST.REPOSITORY')
+               and not exists (
                      select 1 from sert_core.evals where application_id = a.application_id)
                and not exists (
                      select 1
@@ -843,7 +855,7 @@ begin
             begin
               sert_core.eval_pkg.eval(
                 p_application_id    => r_app.application_id,
-                p_rule_set_key      => 'INTERNAL',
+                p_rule_set_key      => l_rule_set_key,
                 p_run_in_background => 'Y',
                 p_eval_id_out       => l_eval_id
               );
