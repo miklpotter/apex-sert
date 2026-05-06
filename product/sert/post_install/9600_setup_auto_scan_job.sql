@@ -6,31 +6,34 @@
 --------------------------------------------------------------------------------
 
 --changeset mipotter:create_auto_scan_job_1715115600002 endDelimiter:/ runOnChange:true runAlways:false rollbackEndDelimiter:/
---preconditions onFail:MARK_RAN onError:HALT
---precondition-sql-check expectedResult:0 select count(1) from user_scheduler_jobs where job_name = 'SERT_AUTO_SCAN_JOB';
-
 declare
-  l_job_exists number;
+  l_frequency       varchar2(10)  := upper(nvl('${sert_auto_scan_frequency}', 'HOURLY'));
+  l_interval        varchar2(3)   := nvl('${sert_auto_scan_interval}', '1');
+  l_repeat_interval varchar2(100);
 begin
-  -- Check if job already exists (in case of re-run)
-  select count(1) into l_job_exists
-    from user_scheduler_jobs
-   where job_name = 'SERT_AUTO_SCAN_JOB';
-
-  if l_job_exists > 0 then
-    -- Drop existing job to recreate it
-    begin
-      dbms_scheduler.drop_job(job_name => 'SERT_AUTO_SCAN_JOB', force => true);
-    exception
-      when others then
-        if sqlcode != -27475 then  -- Object does not exist
-          raise;
-        end if;
-    end;
+  -- Validate frequency; default to HOURLY if invalid
+  if l_frequency not in ('MINUTELY', 'HOURLY', 'DAILY') then
+    l_frequency := 'HOURLY';
   end if;
 
-  -- Create the daily auto-scan job
-  -- Scheduled for 2 AM UTC every day to run off-peak
+  -- Validate interval (1-99); default to 1 if invalid
+  if not regexp_like(l_interval, '^\d{1,2}$') or
+     to_number(l_interval) < 1 or to_number(l_interval) > 99 then
+    l_interval := '1';
+  end if;
+
+  l_repeat_interval := 'FREQ=' || l_frequency || ';INTERVAL=' || l_interval;
+
+  -- Drop existing job to recreate with updated settings
+  begin
+    dbms_scheduler.drop_job(job_name => 'SERT_AUTO_SCAN_JOB', force => true);
+  exception
+    when others then
+      if sqlcode != -27475 then  -- ORA-27475: object does not exist
+        raise;
+      end if;
+  end;
+
   dbms_scheduler.create_job(
     job_name        => 'SERT_AUTO_SCAN_JOB',
     job_type        => 'PLSQL_BLOCK',
@@ -39,18 +42,17 @@ declare
   l_app_count number;
 begin
   sert_core.schedule_api.queue_auto_scans(
-    p_batch_size     => 20,
-    p_app_count_out  => l_app_count
+    p_app_count_out => l_app_count
   );
   sert_core.log_pkg.log(
-    p_log => 'Auto-scan job completed: ' || l_app_count || ' applications queued',
+    p_log      => 'Auto-scan job completed: ' || l_app_count || ' applications queued',
     p_log_type => 'INFO'
   );
 end;
 !',
-    repeat_interval => 'FREQ=DAILY;BYHOUR=2;BYMINUTE=0',  -- Every day at 2 AM UTC
-    enabled         => false,                             -- Disabled by default; DBA must enable
-    comments        => 'Automated daily scan of stale and unscanned applications, ranked by recent activity'
+    repeat_interval => l_repeat_interval,
+    enabled         => false,   -- DBA must enable when ready
+    comments        => 'Automated scan of stale and unscanned applications, ranked by recent activity'
   );
 
 end;
