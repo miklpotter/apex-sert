@@ -12,6 +12,9 @@ as
    --%suite(schedule_api.queue_auto_scans)
    --%suitepath(sert_core)
 
+   --%beforeeach
+   procedure setup_prefs;
+
    --%test(should_return_0_when_no_stale_or_unscanned_apps)
    procedure no_stale_apps;
 
@@ -26,6 +29,18 @@ as
 
    --%test(should_continue_on_eval_failure_and_return_queued_count)
    procedure error_handling;
+
+   --%test(should_return_0_when_auto_scan_pref_is_N)
+   procedure auto_scan_disabled;
+
+   --%test(should_exclude_apps_in_ignored_workspace)
+   procedure ignored_workspace_excluded;
+
+   --%test(should_queue_batch_size_from_pref_when_no_param_supplied)
+   procedure batch_size_from_pref;
+
+   --%test(should_use_explicit_param_batch_size_over_pref)
+   procedure param_overrides_pref_batch_size;
 
 end test_schedule_api;
 /

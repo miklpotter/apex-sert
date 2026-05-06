@@ -353,6 +353,185 @@ begin
     rollback;
 end error_handling;
 
+------------------------------------------------------------
+-- setup_prefs
+-- Runs before each test via --%beforeeach.
+-- Sets AUTO_SCAN=Y, AUTO_SCAN_BATCH_SIZE=20, AUTO_SCAN_IGNORE_WS=''
+-- so every test starts in a known, permissive state.
+-- Each test can override individual prefs after this runs.
+-- All changes are rolled back by the explicit rollback at test end.
+------------------------------------------------------------
+procedure setup_prefs
+as
+begin
+    sert_core.prefs_api.upsert_pref(
+        p_pref_name   => 'Auto Scan All Apps',
+        p_pref_key    => 'AUTO_SCAN',
+        p_pref_value  => 'Y',
+        p_internal_yn => 'N');
+    sert_core.prefs_api.upsert_pref(
+        p_pref_name   => 'Auto Scan Batch Size',
+        p_pref_key    => 'AUTO_SCAN_BATCH_SIZE',
+        p_pref_value  => '20',
+        p_internal_yn => 'N');
+    sert_core.prefs_api.upsert_pref(
+        p_pref_name   => 'Ignore Workspaces for auto Scan',
+        p_pref_key    => 'AUTO_SCAN_IGNORE_WS',
+        p_pref_value  => '',
+        p_internal_yn => 'N');
+end setup_prefs;
+
+------------------------------------------------------------
+-- auto_scan_disabled
+-- Tests: procedure returns 0 immediately when AUTO_SCAN='N'
+-- Setup: override AUTO_SCAN to N; create one unscanned app
+-- Execute: queue_auto_scans with no p_batch_size
+-- Assert: count = 0 (early exit, no scans queued)
+------------------------------------------------------------
+procedure auto_scan_disabled
+as
+    l_count        number;
+    l_workspace_id number;
+begin
+    sert_core.prefs_api.upsert_pref(
+        p_pref_name   => 'Auto Scan All Apps',
+        p_pref_key    => 'AUTO_SCAN',
+        p_pref_value  => 'N',
+        p_internal_yn => 'N');
+
+    l_workspace_id := setup_test_workspace;
+    setup_test_application(
+        p_workspace_id => l_workspace_id,
+        p_app_id       => c_test_application_id - 5000,
+        p_app_name     => 'TEST_DISABLED_APP');
+
+    sert_core.schedule_api.queue_auto_scans(
+        p_app_count_out => l_count);
+
+    ut.expect(l_count).to_equal(0);
+
+    rollback;
+end auto_scan_disabled;
+
+------------------------------------------------------------
+-- ignored_workspace_excluded
+-- Tests: apps in the ignored workspace are not queued
+-- Setup: AUTO_SCAN_IGNORE_WS = ignored ws name;
+--        one unscanned app in ignored ws, one in active ws
+-- Execute: queue_auto_scans
+-- Assert: count = 1 (only the active workspace app queued)
+------------------------------------------------------------
+procedure ignored_workspace_excluded
+as
+    l_count          number;
+    c_ignored_ws     constant varchar2(100) := 'TEST_IGNORED_WS_99100';
+    c_active_ws      constant varchar2(100) := 'TEST_ACTIVE_WS_99100';
+    c_ignored_ws_id  constant number        := c_test_workspace_id - 1;
+    c_active_ws_id   constant number        := c_test_workspace_id - 2;
+    c_ignored_app_id constant number        := c_test_application_id - 5100;
+    c_active_app_id  constant number        := c_test_application_id - 5200;
+begin
+    sert_core.prefs_api.upsert_pref(
+        p_pref_name   => 'Ignore Workspaces for auto Scan',
+        p_pref_key    => 'AUTO_SCAN_IGNORE_WS',
+        p_pref_value  => c_ignored_ws,
+        p_internal_yn => 'N');
+
+    insert into apex_workspaces (workspace_name, workspace_id)
+    values (c_ignored_ws, c_ignored_ws_id);
+    insert into apex_applications (
+        application_id, workspace_id, workspace,
+        application_name, application_status, last_updated_on)
+    values (c_ignored_app_id, c_ignored_ws_id, c_ignored_ws,
+            'IGNORED_APP', 'AVAILABLE', sysdate);
+
+    insert into apex_workspaces (workspace_name, workspace_id)
+    values (c_active_ws, c_active_ws_id);
+    insert into apex_applications (
+        application_id, workspace_id, workspace,
+        application_name, application_status, last_updated_on)
+    values (c_active_app_id, c_active_ws_id, c_active_ws,
+            'ACTIVE_APP', 'AVAILABLE', sysdate);
+
+    sert_core.schedule_api.queue_auto_scans(
+        p_app_count_out => l_count);
+
+    ut.expect(l_count).to_equal(1);
+
+    rollback;
+end ignored_workspace_excluded;
+
+------------------------------------------------------------
+-- batch_size_from_pref
+-- Tests: procedure reads AUTO_SCAN_BATCH_SIZE pref when
+--        p_batch_size is not supplied
+-- Setup: override AUTO_SCAN_BATCH_SIZE to 5; create 10 apps
+-- Execute: queue_auto_scans with no p_batch_size param
+-- Assert: count = 5
+------------------------------------------------------------
+procedure batch_size_from_pref
+as
+    l_count        number;
+    l_workspace_id number;
+    l_base_app_id  number;
+begin
+    sert_core.prefs_api.upsert_pref(
+        p_pref_name   => 'Auto Scan Batch Size',
+        p_pref_key    => 'AUTO_SCAN_BATCH_SIZE',
+        p_pref_value  => '5',
+        p_internal_yn => 'N');
+
+    l_workspace_id := setup_test_workspace;
+    l_base_app_id  := c_test_application_id - 6000;
+
+    for i in 1..10 loop
+        setup_test_application(
+            p_workspace_id => l_workspace_id,
+            p_app_id       => l_base_app_id + i,
+            p_app_name     => 'TEST_BATCH_PREF_APP_' || i);
+    end loop;
+
+    sert_core.schedule_api.queue_auto_scans(
+        p_app_count_out => l_count);
+
+    ut.expect(l_count).to_equal(5);
+
+    rollback;
+end batch_size_from_pref;
+
+------------------------------------------------------------
+-- param_overrides_pref_batch_size
+-- Tests: explicit p_batch_size parameter wins over pref value
+-- Setup: pref AUTO_SCAN_BATCH_SIZE = 20 (set by setup_prefs)
+--        create 10 unscanned apps
+-- Execute: queue_auto_scans(p_batch_size => 3)
+-- Assert: count = 3 (param, not pref)
+------------------------------------------------------------
+procedure param_overrides_pref_batch_size
+as
+    l_count        number;
+    l_workspace_id number;
+    l_base_app_id  number;
+begin
+    l_workspace_id := setup_test_workspace;
+    l_base_app_id  := c_test_application_id - 7000;
+
+    for i in 1..10 loop
+        setup_test_application(
+            p_workspace_id => l_workspace_id,
+            p_app_id       => l_base_app_id + i,
+            p_app_name     => 'TEST_PARAM_APP_' || i);
+    end loop;
+
+    sert_core.schedule_api.queue_auto_scans(
+        p_batch_size    => 3,
+        p_app_count_out => l_count);
+
+    ut.expect(l_count).to_equal(3);
+
+    rollback;
+end param_overrides_pref_batch_size;
+
 end test_schedule_api;
 /
 --rollback not required
