@@ -121,3 +121,14 @@ begin
 end;
 /
 --rollback not required
+
+--changeset mipotter:050_prefs_merge_auto_scan_batch_size endDelimiter:/ runOnChange:true runAlways:false rollbackEndDelimiter:/ stripComments:false
+begin
+  sert_core.prefs_api.upsert_pref(
+      p_pref_name   => 'Auto Scan Batch Size',
+      p_pref_key    => 'AUTO_SCAN_BATCH_SIZE',
+      p_pref_value  => '10',
+      p_internal_yn => 'N');
+end;
+/
+--rollback not required
