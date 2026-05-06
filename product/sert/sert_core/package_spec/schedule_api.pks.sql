@@ -151,16 +151,15 @@ procedure process_eval_summary_results (
 -- behavior: queries stale evaluations and unscanned applications, ranks by Guardian page activity with eval date
 --   fallback, and returns the count of applications queued for processing.
 -- parameters:
---   p_batch_size     - maximum number of applications to return per call; default 20.
---   p_app_count_out  - output count of applications identified for queuing.
+--   p_batch_size     - maximum number of applications to queue; null (default) reads AUTO_SCAN_BATCH_SIZE pref.
+--   p_app_count_out  - output count of applications successfully queued for evaluation.
 -- usage:
 --   sert_core.schedule_api.queue_auto_scans(
---      p_batch_size    => 20,
 --      p_app_count_out => l_app_count
 --   );
 ----------------------------------------------------------------------------------------------------------------------------
 procedure queue_auto_scans (
-  p_batch_size     in number default 20,
+  p_batch_size     in number default null,
   p_app_count_out  out number);
 
 end schedule_api;
