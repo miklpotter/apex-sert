@@ -722,8 +722,7 @@ is
     with stale_apps as (
       select e.application_id, e.workspace_id, e.eval_on_date
         from sert_core.evals_pub_v e
-        join apex_applications a on a.application_id = e.application_id
-       where e.eval_on_date < a.last_updated_on - 1
+       where e.eval_on_date < e.last_updated_on - 1
          and upper(e.workspace) not in ('INTERNAL', 'COM.ORACLE.CUST.REPOSITORY')
          and upper(e.workspace) not in (
                select upper(trim(column_value))
