@@ -532,11 +532,11 @@ begin
           from sert_core.evals_pub_v e
           join apex_applications a on a.application_id = e.application_id
          where e.eval_on_date < a.last_updated_on - 1
-           and upper(e.workspace) not in ('INTERNAL', 'TOWER', 'COM.ORACLE.CUST.REPOSITORY')
+           and upper(e.workspace) not in ('INTERNAL', 'COM.ORACLE.CUST.REPOSITORY')
         union all
         select a.application_id
           from apex_applications a
-         where upper(a.workspace) not in ('INTERNAL', 'TOWER', 'COM.ORACLE.CUST.REPOSITORY')
+         where upper(a.workspace) not in ('INTERNAL', 'COM.ORACLE.CUST.REPOSITORY')
            and not exists (
                  select 1 from sert_core.evals where application_id = a.application_id)
       );
