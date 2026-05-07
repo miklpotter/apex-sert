@@ -1,5 +1,14 @@
 # Release Notes
-
+## 24.2.28
+### Automate scanning of applications
+  - provide capability to automate scanning of applications. A Job is always configured, but scanning is enabled through 
+  the preference "Auto Scan All Apps" (AUTO_SCAN). if set to 'Y' then the job will identify unscanned and applications with a stale scan status as candidates for scanning. 
+    - AUTO_SCAN_BATCH_SIZE preference controls how many scans will be submitted per schedule run (at maximum)
+    - AUTO_SCAN_IGNORE_WS preference allows you to ignore a comma delimited list of workspaces (by name)
+    - INTERNAL and product workspaces are always ignored.
+    - sert.properties are set as INSTALL time to define the job schedule
+      - sert_auto_scan_frequency = HOURLY
+      - sert_auto_scan_interval = 1
 ## 24.2.27
 ### Automate extension subscription for new workspaces
 
