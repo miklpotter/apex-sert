@@ -489,6 +489,68 @@ begin
     rollback;
 end param_overrides_pref_batch_size;
 
+------------------------------------------------------------
+-- recently_evaluated_not_stale
+-- Tests: app whose eval_on_date is 12 hours before last_updated_on
+--        is NOT a stale candidate (requires > 1 day gap)
+-- Setup: reset app 2100; insert eval 12h before last_updated_on;
+--        compute baseline; run queue_auto_scans
+-- Assert: count equals baseline (grace-period app was not queued)
+------------------------------------------------------------
+procedure recently_evaluated_not_stale
+as
+    l_count        number;
+    l_expected     number;
+    l_last_updated date;
+    l_workspace_id number;
+    l_ignored_eval number;
+begin
+    -- Reset app 2100 to a clean state (no evals)
+    delete from sert_core.evals where application_id = 2100;
+
+    -- Get app 2100's workspace and last modification date
+    select workspace_id, last_updated_on
+      into l_workspace_id, l_last_updated
+      from apex_applications
+     where application_id = 2100;
+
+    -- Insert eval 12 hours BEFORE the app's last modification.
+    -- eval_on_date (12h before last_updated_on) < last_updated_on:        YES → old 'Stale' rule flags this app → old code queues it
+    -- eval_on_date (12h before last_updated_on) < last_updated_on - 1:   NO  → new rule does NOT flag it → new code skips it
+    l_ignored_eval := setup_test_eval(
+        p_workspace_id => l_workspace_id,
+        p_app_id       => 2100,
+        p_eval_date    => l_last_updated - (12/24));
+
+    -- Baseline: count candidates under the NEW staleness formula.
+    -- Computed AFTER the insert so app 2100 is visible but excluded:
+    --   - not unscanned (has an eval)
+    --   - not stale (eval_on_date = last_updated_on - 0.5, which is NOT < last_updated_on - 1)
+    select count(*) into l_expected
+      from (
+        select e.application_id
+          from sert_core.evals_pub_v e
+          join apex_applications a on a.application_id = e.application_id
+         where e.eval_on_date < a.last_updated_on - 1
+           and upper(e.workspace) not in ('INTERNAL', 'TOWER', 'COM.ORACLE.CUST.REPOSITORY')
+        union all
+        select a.application_id
+          from apex_applications a
+         where upper(a.workspace) not in ('INTERNAL', 'TOWER', 'COM.ORACLE.CUST.REPOSITORY')
+           and not exists (
+                 select 1 from sert_core.evals where application_id = a.application_id)
+      );
+
+    sert_core.schedule_api.queue_auto_scans(
+        p_batch_size    => 999,
+        p_app_count_out => l_count);
+
+    -- The grace-period app must not have increased the count
+    ut.expect(l_count).to_equal(l_expected);
+
+    rollback;
+end recently_evaluated_not_stale;
+
 end test_schedule_api;
 /
 --rollback not required

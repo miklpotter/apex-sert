@@ -46,6 +46,10 @@ as
    --%rollback(manual)
    procedure param_overrides_pref_batch_size;
 
+   --%test(should_not_queue_app_evaluated_within_1_day_of_modification)
+   --%rollback(manual)
+   procedure recently_evaluated_not_stale;
+
 end test_schedule_api;
 /
 --rollback not required
