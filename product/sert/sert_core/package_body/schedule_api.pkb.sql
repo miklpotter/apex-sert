@@ -26,7 +26,7 @@ as
 -- usage:
 --   l_job_name := scheduler_job_name(
 --      p_app_id       => 100,
---      p_rule_set_key => 'INTERNAL'
+--      p_rule_set_key => 'SERT-SECURITY'
 --   );
 ----------------------------------------------------------------------------------------------------------------------------
 function scheduler_job_name (
@@ -191,7 +191,7 @@ end create_schedule_job_core;
 --      p_ampm         => 'AM',
 --      p_eval_id      => 0,
 --      p_app_id       => 100,
---      p_rule_set_key => 'INTERNAL'
+--      p_rule_set_key => 'SERT-SECURITY'
 --   );
 ----------------------------------------------------------------------------------------------------------------------------
 procedure add_schedule_job (
@@ -246,7 +246,7 @@ end add_schedule_job;
 --      p_minute        => 30,
 --      p_eval_id       => 0,
 --      p_app_id        => 100,
---      p_rule_set_key  => 'INTERNAL'
+--      p_rule_set_key  => 'SERT-SECURITY'
 --   );
 ----------------------------------------------------------------------------------------------------------------------------
 procedure add_schedule_job_flex
@@ -303,7 +303,7 @@ end add_schedule_job_flex;
 -- usage:
 --   sert_core.schedule_api.remove_schedule_job(
 --      p_app_id       => 100,
---      p_rule_set_key => 'INTERNAL'
+--      p_rule_set_key => 'SERT-SECURITY'
 --   );
 ----------------------------------------------------------------------------------------------------------------------------
 procedure remove_schedule_job (
@@ -326,7 +326,7 @@ end remove_schedule_job;
 --   p_job_name - fully qualified scheduler job name.
 -- usage:
 --   sert_core.schedule_api.remove_schedule_job(
---      p_job_name => 'SERT_CORE.SERT_SCHEDULED_EVAL_100_INTERNAL'
+--      p_job_name => 'SERT_CORE.SERT_SCHEDULED_EVAL_100_SERT_SECURITY'
 --   );
 ----------------------------------------------------------------------------------------------------------------------------
 procedure remove_schedule_job (
@@ -348,7 +348,7 @@ end remove_schedule_job;
 --   p_job_name - fully qualified scheduler job name.
 -- usage:
 --   sert_core.schedule_api.run_schedule_job(
---      p_job_name => 'SERT_CORE.SERT_SCHEDULED_EVAL_100_INTERNAL'
+--      p_job_name => 'SERT_CORE.SERT_SCHEDULED_EVAL_100_SERT_SECURITY'
 --   );
 ----------------------------------------------------------------------------------------------------------------------------
 procedure run_schedule_job (
@@ -378,7 +378,7 @@ end run_schedule_job;
 --      p_hour         => '09',
 --      p_min          => 30,
 --      p_ampm         => 'AM',
---      p_rule_set_key => 'INTERNAL'
+--      p_rule_set_key => 'SERT-SECURITY'
 --   );
 ----------------------------------------------------------------------------------------------------------------------------
 procedure schedule_jobs (
@@ -442,7 +442,7 @@ end schedule_jobs;
 --      p_weekdays      => null,
 --      p_hour24        => null,
 --      p_minute        => null,
---      p_rule_set_key  => 'INTERNAL'
+--      p_rule_set_key  => 'SERT-SECURITY'
 --   );
 ----------------------------------------------------------------------------------------------------------------------------
 procedure schedule_jobs_flex (
@@ -585,7 +585,7 @@ is
    is
       select 'Y'
         from apex_applications
-       where workspace not in ('INTERNAL', 'TOWER', 'COM.ORACLE.CUST.REPOSITORY')
+       where workspace not in ('INTERNAL', 'COM.ORACLE.CUST.REPOSITORY')
          and application_name not in ('APEX-SERT', 'APEX-SERT Administration')
          and application_id = p_application_id;
 
@@ -690,6 +690,135 @@ exception
       log_pkg.log(p_log => 'Error in:' || l_proc_name || ' ' || sqlerrm, p_log_type => 'UNHANDLED');
       raise_application_error(-20000, dbms_utility.format_error_backtrace);
 end process_eval_summary_results;
+
+----------------------------------------------------------------------------------------------------------------------------
+-- PROCEDURE: Q U E U E _ A U T O _ S C A N S
+----------------------------------------------------------------------------------------------------------------------------
+-- Finds stale and unscanned applications, ranks by Guardian activity, and queues for evaluation
+----------------------------------------------------------------------------------------------------------------------------
+-- queue_auto_scans
+-- purpose: identify and queue applications needing security evaluation based on staleness and scan status.
+-- behavior: reads AUTO_SCAN, AUTO_SCAN_BATCH_SIZE, and AUTO_SCAN_IGNORE_WS preferences at runtime;
+--   exits early when AUTO_SCAN='N'; excludes hardcoded system workspaces and ignored workspaces;
+--   uses conditional compilation to join Guardian activity when available, eval_on_date ordering otherwise.
+-- parameters:
+--   p_batch_size     - maximum apps to queue; null reads AUTO_SCAN_BATCH_SIZE pref (default 10).
+--   p_app_count_out  - output count of applications successfully queued.
+-- usage:
+--   sert_core.schedule_api.queue_auto_scans(p_app_count_out => l_app_count);
+----------------------------------------------------------------------------------------------------------------------------
+procedure queue_auto_scans
+(
+  p_batch_size     in number default null,
+  p_app_count_out  out number
+)
+is
+  l_batch_size   number;
+  l_ignore_ws    varchar2(4000);
+  l_rule_set_key rule_sets.rule_set_key%type;
+  l_app_count    number := 0;
+
+  cursor c_auto_scan_apps is
+    with stale_apps as (
+      select e.application_id, e.workspace_id, e.eval_on_date
+        from sert_core.evals_pub_v e
+       where e.eval_on_date < e.last_updated_on - 1
+         and upper(e.workspace) not in ('INTERNAL', 'COM.ORACLE.CUST.REPOSITORY')
+         and upper(e.workspace) not in (
+               select upper(trim(column_value))
+                 from table(apex_string.split(l_ignore_ws, ','))
+                where column_value is not null)
+    )
+    , unscanned_apps as (
+      select distinct a.application_id, a.workspace_id, null as eval_on_date
+        from apex_applications a
+       where upper(a.workspace) not in ('INTERNAL', 'COM.ORACLE.CUST.REPOSITORY')
+         and upper(a.workspace) not in (
+               select upper(trim(column_value))
+                 from table(apex_string.split(l_ignore_ws, ','))
+                where column_value is not null)
+         and not exists (
+               select 1 from sert_core.evals where application_id = a.application_id)
+    )
+$IF $$GUARDIAN_INSTALLED $THEN
+    select a.application_id, a.workspace_id
+      from (select * from stale_apps union all select * from unscanned_apps) a
+      left join sert_core.sg_most_4wk_app_activity_f g
+        on a.workspace_id = g.workspace_id
+       and a.application_id = g.application_id
+     order by coalesce(g.page_events, 0) desc,
+              a.eval_on_date desc nulls first
+     fetch first l_batch_size rows only
+$ELSE
+    select a.application_id, a.workspace_id
+      from (select * from stale_apps union all select * from unscanned_apps) a
+     order by a.eval_on_date desc nulls first
+     fetch first l_batch_size rows only
+$END
+    ;
+
+begin
+  -- Early exit when auto-scan is disabled
+  if upper(sert_core.prefs_api.pref_value('AUTO_SCAN')) = 'N' then
+    sert_core.log_pkg.log(
+      p_log      => 'Auto-scan skipped: AUTO_SCAN preference is N',
+      p_log_type => 'INFO');
+    p_app_count_out := 0;
+    return;
+  end if;
+
+  -- Explicit param wins; otherwise read pref, default 10 on missing/non-numeric value
+  if p_batch_size is not null then
+    l_batch_size := p_batch_size;
+  else
+    begin
+      l_batch_size := to_number(sert_core.prefs_api.pref_value('AUTO_SCAN_BATCH_SIZE'));
+    exception
+      when others then
+        l_batch_size := 10;
+    end;
+    l_batch_size := nvl(l_batch_size, 10);
+  end if;
+
+  -- Empty/null pref means no exclusions; apex_string.split handles null gracefully
+  l_ignore_ws := sert_core.prefs_api.pref_value('AUTO_SCAN_IGNORE_WS');
+
+  -- Resolve the active rule set for the current APEX version at runtime
+  select rule_set_key
+    into l_rule_set_key
+    from sert_core.rule_sets
+   where active_yn = 'Y'
+     and apex_version = (select apex_version from sert_core.apex_version_v);
+
+  for r_app in c_auto_scan_apps loop
+    declare
+      l_eval_id number;
+    begin
+      sert_core.eval_pkg.eval(
+        p_application_id    => r_app.application_id,
+        p_rule_set_key      => l_rule_set_key,
+        p_run_in_background => 'Y',
+        p_eval_id_out       => l_eval_id
+      );
+      sert_core.log_pkg.log(
+        p_log            => 'Auto-scan queued for application ' || r_app.application_id || ' (eval_id=' || l_eval_id || ')',
+        p_application_id => r_app.application_id,
+        p_log_type       => 'EVAL'
+      );
+      l_app_count := l_app_count + 1;
+    exception
+      when others then
+        sert_core.log_pkg.log(
+          p_log            => 'Failed to queue auto-scan for application ' || r_app.application_id || ': ' || sqlerrm,
+          p_application_id => r_app.application_id,
+          p_log_type       => 'UNHANDLED'
+        );
+    end;
+  end loop;
+
+  p_app_count_out := l_app_count;
+
+end queue_auto_scans;
 
 
 ----------------------------------------------------------------------------------------------------------------------------
