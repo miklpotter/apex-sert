@@ -51,7 +51,7 @@ begin
 end;
 !',
     repeat_interval => l_repeat_interval,
-    enabled         => false,   -- DBA must enable when ready
+    enabled         => false,
     comments        => 'Automated scan of stale and unscanned applications, ranked by recent activity'
   );
 

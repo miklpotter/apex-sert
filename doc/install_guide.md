@@ -309,6 +309,52 @@ to do this manually for a single workspace:
 
 <img src="./images/launch-sert.gif" alt="GIF of user launching SERT" width=50% height=50%>
 
+### 3.4 Automated Scanning
+
+APEX-SERT can automatically scan applications on a configurable schedule using a DBMS_Scheduler job. When enabled, the job calls `schedule_api.queue_auto_scans()` to identify and queue stale or unscanned applications, ranked by recent activity.
+
+#### 3.4.1 Configure Automated Scanning
+
+Edit `sert.properties` before installation and set the following properties:
+
+```properties
+# Enable the automated scanning job
+# Valid values: active (create job) or none / absent (skip job)
+# Default: none (job not created)
+sert_auto_scan_job = active
+
+# Job execution frequency
+# Valid values: MINUTELY, HOURLY, DAILY (case-insensitive)
+# Default: HOURLY
+sert_auto_scan_frequency = HOURLY
+
+# Job execution interval (1-99 within the frequency unit)
+# Default: 1
+# Examples: HOURLY with interval 4 runs every 4 hours
+#           DAILY with interval 1 runs once per day
+sert_auto_scan_interval = 1
+```
+
+**Notes on Behavior:**
+
+* Invalid or missing frequency or interval values silently fall back to defaults; installation never fails due to misconfiguration
+* Job name: `SERT_AUTO_SCAN_JOB` (one per installation)
+* The job is created **disabled** by default and must be explicitly enabled after installation (see section 3.4.2)
+
+#### 3.4.2 Enable the Automated Scan Job After Installation
+
+The auto-scan job is created in a disabled state so that you can verify your installation before enabling background scanning. Once you are satisfied with the installation, enable the job by running the following as the installing schema (ACDC or equivalent):
+
+```sql
+begin
+  dbms_scheduler.enable('SERT_AUTO_SCAN_JOB');
+end;
+/
+```
+
+> [!TIP]
+> To disable the job at any time without removing it, run `dbms_scheduler.disable('SERT_AUTO_SCAN_JOB');`. To remove it entirely, run `dbms_scheduler.drop_job('SERT_AUTO_SCAN_JOB');`.
+
 ## 4 Uninstall APEX-SERT
 
 to uninstall APEX-SERT, you can simply execute the uninstall script to remove APEX-SERT, it's workspace, menu extension, schema and all liquibase logs.
