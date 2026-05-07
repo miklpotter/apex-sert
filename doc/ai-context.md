@@ -248,13 +248,25 @@ Every `.sql` file must begin with:
 
 ```sql
 --liquibase formatted sql
+```
+
+### Licence Header (mandatory on every SQL file)
+
+The canonical licence snippet is in `development/licence_snip.txt`. **Always read this file before inserting or updating the header** — its content may change and must be used verbatim.
+
+- **New files:** place the snippet on line 2, immediately after the `--liquibase formatted sql` line.
+- **Modified files:** replace whatever copyright/licence text is already present with the current snippet content.
+
+Example structure for a new file:
+
+```sql
+--liquibase formatted sql
 -------------------------------------------------------------------------------
+-- Copyright (c) 2024-2026 Oracle and/or its affiliates.
 -- Licensed under the Universal Permissive License v 1.0 as shown
 -- at https://oss.oracle.com/licenses/upl/
 --------------------------------------------------------------------------------
 ```
-
-Canonical copyright block: `development/licence_snip.txt`
 
 ### Changeset Attributes
 
