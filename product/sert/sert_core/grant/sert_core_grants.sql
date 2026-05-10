@@ -18,3 +18,12 @@ grant CREATE SEQUENCE to sert_core;
 grant CREATE TRIGGER to sert_core;
 grant CREATE TYPE to sert_core;
 --rollback not required
+
+-- only run this if DBV is not enabled.
+--changeset mipotter:grant_create_job_to_sert_core_1721803257869 endDelimiter:/ runOnChange:true runAlways:false rollbackEndDelimiter:/
+--preconditions onFail:CONTINUE onError:HALT
+--precondition-sql-check expectedResult:1 select count(*) FROM V$OPTION WHERE PARAMETER = 'Oracle Database Vault' and value = 'FALSE';
+grant create job to sert_core
+/
+--rollback not required
+
