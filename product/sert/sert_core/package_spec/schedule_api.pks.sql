@@ -162,6 +162,43 @@ procedure queue_auto_scans (
   p_batch_size     in number default null,
   p_app_count_out  out number);
 
+----------------------------------------------------------------------------------------------------------------------------
+-- PROCEDURE: S E T U P _ A U T O _ S C A N _ J O B
+----------------------------------------------------------------------------------------------------------------------------
+-- Creates or replaces the SERT_AUTO_SCAN_JOB DBMS_SCHEDULER job
+----------------------------------------------------------------------------------------------------------------------------
+-- setup_auto_scan_job
+-- purpose: create (or recreate) the SERT_AUTO_SCAN_JOB scheduler job owned by sert_core.
+-- behavior: validates frequency (MINUTELY/HOURLY/DAILY, defaults to HOURLY) and interval (1-99, defaults to 1),
+--   drops any existing job of the same name, then creates the new job in disabled state.
+-- parameters:
+--   p_frequency - recurrence unit; accepted values are MINUTELY, HOURLY, DAILY.
+--   p_interval  - numeric interval as a string (1-99).
+-- usage:
+--   sert_core.schedule_api.setup_auto_scan_job(
+--      p_frequency => 'HOURLY',
+--      p_interval  => '1'
+--   );
+----------------------------------------------------------------------------------------------------------------------------
+procedure setup_auto_scan_job (
+  p_frequency in varchar2 default 'HOURLY',
+  p_interval  in varchar2 default '1');
+
+----------------------------------------------------------------------------------------------------------------------------
+-- FUNCTION: A U T O _ S C A N _ J O B _ I N T E R V A L
+----------------------------------------------------------------------------------------------------------------------------
+-- Returns the repeat_interval of the SERT_AUTO_SCAN_JOB scheduler job
+----------------------------------------------------------------------------------------------------------------------------
+-- auto_scan_job_interval
+-- purpose: expose the current repeat_interval for SERT_AUTO_SCAN_JOB without requiring direct access to scheduler views.
+-- behavior: queries user_scheduler_jobs for SERT_AUTO_SCAN_JOB; returns null when the job does not exist.
+-- returns:
+--   varchar2 - repeat_interval string (e.g. 'FREQ=HOURLY;INTERVAL=1'), or null if the job is absent.
+-- usage:
+--   l_interval := sert_core.schedule_api.auto_scan_job_interval;
+----------------------------------------------------------------------------------------------------------------------------
+function auto_scan_job_interval return varchar2;
+
 end schedule_api;
 /
 --rollback not required

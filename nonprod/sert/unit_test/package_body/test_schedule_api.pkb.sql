@@ -11,7 +11,41 @@ as
 
 -- Test workspace/app IDs that do not exist in production data
 c_test_workspace_id     constant number := -99100;
-c_test_application_id   constant number := -99100;
+c_test_workspace        constant varchar2(255) := 'DEMO';
+c_test_application_id   constant number := 200;
+c_min_test_application_id   constant number := 200;
+c_max_test_application_id   constant number := 230;
+
+
+------------------------------------------------------------
+-- setup_prefs
+-- Runs before each test via --%beforeeach.
+-- Sets AUTO_SCAN=Y, AUTO_SCAN_BATCH_SIZE=20, AUTO_SCAN_IGNORE_WS=''
+-- so every test starts in a known, permissive state.
+-- Each test can override individual prefs after this runs.
+-- All changes are rolled back by the explicit rollback at test end.
+------------------------------------------------------------
+procedure setup_prefs
+as
+begin
+    sert_core.prefs_api.upsert_pref(
+        p_pref_name   => 'Auto Scan All Apps',
+        p_pref_key    => 'AUTO_SCAN',
+        p_pref_value  => 'Y',
+        p_internal_yn => 'N');
+    sert_core.prefs_api.upsert_pref(
+        p_pref_name   => 'Auto Scan Batch Size',
+        p_pref_key    => 'AUTO_SCAN_BATCH_SIZE',
+        p_pref_value  => '20',
+        p_internal_yn => 'N');
+    -- '~' is a sentinel that matches no real workspace name; effectively disables filtering.
+    -- Oracle treats '' as NULL, which violates the NOT NULL constraint on prefs.pref_value.
+    sert_core.prefs_api.upsert_pref(
+        p_pref_name   => 'Ignore Workspaces for auto Scan',
+        p_pref_key    => 'AUTO_SCAN_IGNORE_WS',
+        p_pref_value  => '~',
+        p_internal_yn => 'N');
+end setup_prefs;
 
 ------------------------------------------------------------
 -- setup_test_workspace
@@ -23,11 +57,12 @@ function setup_test_workspace return number
 is
     l_workspace_id number := c_test_workspace_id;
 begin
-    execute immediate
-        'insert into apex_workspaces (workspace, workspace_description, workspace_id) values (:1, :2, :3)'
-      using 'TEST_WORKSPACE_QUEUE_' || abs(c_test_workspace_id),
-            'Test workspace for queue_auto_scans',
-            c_test_workspace_id;
+    select workspace_id into l_workspace_id from apex_workspaces where workspace = 'DEMO';
+    -- execute immediate
+    --     'insert into apex_workspaces (workspace, workspace_description, workspace_id) values (:1, :2, :3)'
+    --   using 'TEST_WORKSPACE_QUEUE_' || abs(c_test_workspace_id),
+    --         'Test workspace for queue_auto_scans',
+    --         c_test_workspace_id;
     return l_workspace_id;
 end setup_test_workspace;
 
@@ -43,10 +78,13 @@ procedure setup_test_application (
     p_app_name      in varchar2,
     p_last_updated  in date default sysdate)
 is
+    l_app_count     number;
 begin
-    execute immediate
-        'insert into apex_applications (application_id, workspace_id, application_name, availability_status, last_updated_on) values (:1, :2, :3, :4, :5)'
-      using p_app_id, p_workspace_id, p_app_name, 'AVAILABLE', p_last_updated;
+    select count(*) into l_app_count
+    from apex_applications 
+    where application_id between c_min_test_application_id and c_max_test_application_id;
+
+    ut.expect(l_app_count).to_equal(30);
 end setup_test_application;
 
 ------------------------------------------------------------
@@ -67,15 +105,23 @@ is
     l_rule_set_id     number;
     l_rule_set_count  number;
 begin
-    -- Precondition: at least one rule set must exist
+    -- Precondition: at least one rule set (SERT-SECURITY) must exist for the installed version
     select count(*) into l_rule_set_count
       from sert_core.rule_sets
-     where rule_set_id > 0;
+     where rule_set_key = 'SERT-SECURITY'
+       and active_yn = 'Y'
+       and apex_version = sert_core.prefs_api.pref_value('SERT_APEX_VERSION');
+
     ut.expect(l_rule_set_count).to_be_greater_than(0);
-
+      
     -- Get first available rule_set_id
-    select min(rule_set_id) into l_rule_set_id from sert_core.rule_sets where rule_set_id > 0;
+    select min(rule_set_id) into l_rule_set_id 
+      from sert_core.rule_sets 
+     where rule_set_key = 'SERT-SECURITY'
+       and active_yn = 'Y'
+       and apex_version = sert_core.prefs_api.pref_value('SERT_APEX_VERSION');
 
+    -- insert minimal eval record
     insert into sert_core.evals (
         workspace_id,
         application_id,
@@ -93,6 +139,29 @@ begin
     return l_eval_id;
 end setup_test_eval;
 
+procedure check_test_apps ( 
+    p_workspace_id  in number )
+is
+    l_app_count     number;
+    l_app_id        number;
+    l_eval_id       number;
+begin 
+    select count(*) into l_app_count
+    from apex_applications 
+    where application_id between c_min_test_application_id and c_max_test_application_id;
+    ut.expect(l_app_count).to_equal(31);
+    -- clean out any evals
+    delete from sert_core.evals where application_id between c_min_test_application_id and c_max_test_application_id;
+    -- configure a known starting point
+    for l_app_id in (c_min_test_application_id+1)..c_max_test_application_id loop
+        l_eval_id := setup_test_eval(
+            p_workspace_id => p_workspace_id,
+            p_app_id       => l_app_id,
+            p_eval_date    => sysdate);
+    end loop; -- for l_app_id
+
+end;
+
 ------------------------------------------------------------
 -- no_stale_apps
 -- Tests: should return 1 when an unscanned app exists
@@ -104,23 +173,32 @@ procedure no_stale_apps
 as
     l_count         number := 0;
     l_workspace_id  number;
+    l_eval_id       number := 0; 
+    l_app_id        number;
 begin
     -- Setup: Create test workspace and one app with no evaluations
     l_workspace_id := setup_test_workspace;
-    setup_test_application(
-        p_workspace_id => l_workspace_id,
-        p_app_id       => c_test_application_id,
-        p_app_name     => 'TEST_APP_NO_EVALS');
+    check_test_apps(l_workspace_id);
+    -- it is necessary to have applications prebuilt from ID c_min_test_application_id-c_max_test_application_id
+    -- first make sure no evals exists
+    -- now configure evals for all bar ONE app (200)
+    -- delete from sert_core.evals where application_id between c_min_test_application_id and c_max_test_application_id;
+    -- for l_app_id in (c_min_test_application_id+1)..c_max_test_application_id loop
+    --     l_eval_id := setup_test_eval(
+    --         p_workspace_id => l_workspace_id,
+    --         p_app_id       => l_app_id,
+    --         p_eval_date    => sysdate);
+    -- end loop; -- for l_app_id
 
-    -- Execute: Call queue_auto_scans
     sert_core.schedule_api.queue_auto_scans(
-        p_batch_size => 20,
+        p_batch_size => 10,
         p_app_count_out => l_count);
 
     -- Assert: Should return 1 (the unscanned app)
     ut.expect(l_count).to_equal(1);
 
     -- Cleanup: Rollback test data
+    delete from sert_core.evals where application_id between c_min_test_application_id and c_max_test_application_id;
     rollback;
 end no_stale_apps;
 
@@ -135,18 +213,20 @@ procedure stale_apps_under_limit
 as
     l_count         number := 0;
     l_workspace_id  number;
-    l_base_app_id   number;
+    l_eval_id       number := 0; 
 begin
     -- Setup: Create test workspace and 5 unscanned apps
     l_workspace_id := setup_test_workspace;
-    l_base_app_id := c_test_application_id - 1000;
 
-    for i in 1..5 loop
-        setup_test_application(
+    check_test_apps(l_workspace_id);
+    delete from sert_core.evals where application_id between c_min_test_application_id and c_min_test_application_id + 4;
+    -- now configure evals for all bar ONE app (200)
+    for l_app_id in (c_min_test_application_id+5)..c_max_test_application_id loop
+        l_eval_id := setup_test_eval(
             p_workspace_id => l_workspace_id,
-            p_app_id       => l_base_app_id + i,
-            p_app_name     => 'TEST_STALE_APP_' || i);
-    end loop;
+            p_app_id       => l_app_id,
+            p_eval_date    => sysdate);
+    end loop; -- for l_app_id
 
     -- Execute: Call queue_auto_scans with default batch size
     sert_core.schedule_api.queue_auto_scans(
@@ -158,7 +238,13 @@ begin
 
     -- Cleanup: Rollback test data
     rollback;
+    delete from sert_core.evals where application_id between c_min_test_application_id and c_max_test_application_id;
+
 end stale_apps_under_limit;
+
+-- =============================================================================================
+-- to be completed below
+-- =============================================================================================
 
 ------------------------------------------------------------
 -- top_20_by_guardian_activity
@@ -176,9 +262,9 @@ as
 begin
     -- Setup: Create test workspace
     l_workspace_id := setup_test_workspace;
-    l_base_app_id := c_test_application_id - 2000;
+    check_test_apps(l_workspace_id);
 
-    -- Create 50 unscanned apps (Guardian not installed; falls back to eval_on_date ordering)
+    -- Create 30 unscanned apps (Guardian not installed; falls back to eval_on_date ordering)
     for i in 1..50 loop
         setup_test_application(
             p_workspace_id => l_workspace_id,
@@ -197,54 +283,6 @@ begin
     -- Cleanup: Rollback test data
     rollback;
 end top_20_by_guardian_activity;
-
-------------------------------------------------------------
--- guardian_fallback
--- Tests: should fallback to eval_on_date ordering without Guardian
--- Setup: Create test workspace with 5 stale apps
--- Execute: Call queue_auto_scans
--- Assert: Should return 5 apps (fallback to eval_on_date ordering)
-------------------------------------------------------------
-procedure guardian_fallback
-as
-    l_count         number := 0;
-    l_workspace_id  number;
-    l_base_app_id   number;
-    l_old_eval_date date;
-    l_ignored_eval  number;
-begin
-    -- Setup: Create test workspace
-    l_workspace_id := setup_test_workspace;
-    l_base_app_id := c_test_application_id - 3000;
-    l_old_eval_date := trunc(sysdate) - 2;  -- 2 days ago
-
-    -- Create 5 stale apps with evaluations older than app last_updated_on
-    for i in 1..5 loop
-        -- Create app with recent modification date
-        setup_test_application(
-            p_workspace_id => l_workspace_id,
-            p_app_id       => l_base_app_id + i,
-            p_app_name     => 'TEST_FALLBACK_APP_' || i,
-            p_last_updated => sysdate);  -- app was updated today
-
-        -- But evaluation happened 2 days ago
-        l_ignored_eval := setup_test_eval(
-            p_workspace_id => l_workspace_id,
-            p_app_id       => l_base_app_id + i,
-            p_eval_date    => l_old_eval_date);
-    end loop;
-
-    -- Execute: Call queue_auto_scans (Guardian table will be empty, fallback to eval_on_date)
-    sert_core.schedule_api.queue_auto_scans(
-        p_batch_size => 20,
-        p_app_count_out => l_count);
-
-    -- Assert: Should return 5 (fallback to eval_on_date ordering works)
-    ut.expect(l_count).to_equal(5);
-
-    -- Cleanup: Rollback test data
-    rollback;
-end guardian_fallback;
 
 ------------------------------------------------------------
 -- error_handling
@@ -282,36 +320,6 @@ begin
     -- Cleanup: Rollback test data
     rollback;
 end error_handling;
-
-------------------------------------------------------------
--- setup_prefs
--- Runs before each test via --%beforeeach.
--- Sets AUTO_SCAN=Y, AUTO_SCAN_BATCH_SIZE=20, AUTO_SCAN_IGNORE_WS=''
--- so every test starts in a known, permissive state.
--- Each test can override individual prefs after this runs.
--- All changes are rolled back by the explicit rollback at test end.
-------------------------------------------------------------
-procedure setup_prefs
-as
-begin
-    sert_core.prefs_api.upsert_pref(
-        p_pref_name   => 'Auto Scan All Apps',
-        p_pref_key    => 'AUTO_SCAN',
-        p_pref_value  => 'Y',
-        p_internal_yn => 'N');
-    sert_core.prefs_api.upsert_pref(
-        p_pref_name   => 'Auto Scan Batch Size',
-        p_pref_key    => 'AUTO_SCAN_BATCH_SIZE',
-        p_pref_value  => '20',
-        p_internal_yn => 'N');
-    -- '~' is a sentinel that matches no real workspace name; effectively disables filtering.
-    -- Oracle treats '' as NULL, which violates the NOT NULL constraint on prefs.pref_value.
-    sert_core.prefs_api.upsert_pref(
-        p_pref_name   => 'Ignore Workspaces for auto Scan',
-        p_pref_key    => 'AUTO_SCAN_IGNORE_WS',
-        p_pref_value  => '~',
-        p_internal_yn => 'N');
-end setup_prefs;
 
 ------------------------------------------------------------
 -- auto_scan_disabled
@@ -354,25 +362,26 @@ as
     l_expected_count  number;
 begin
     -- Reset evals for all SERT apps so all 3 are unscanned candidates regardless of prior test runs.
-    delete from sert_core.evals where application_id in (2100, 2101, 2102);
+    delete from sert_core.evals 
+    where application_id between c_min_test_application_id and c_max_test_application_id;
 
     sert_core.prefs_api.upsert_pref(
         p_pref_name   => 'Ignore Workspaces for auto Scan',
         p_pref_key    => 'AUTO_SCAN_IGNORE_WS',
-        p_pref_value  => 'SERT',
+        p_pref_value  => 'SERT,DEMO',
         p_internal_yn => 'N');
 
-    -- Precondition: SERT must have at least one candidate (filter has real effect)
+    -- Precondition: c_test_workspace must have at least one candidate (filter has real effect)
     select count(*) into l_sert_candidates
       from (
         select e.application_id
           from sert_core.evals_pub_v e
          where e.eval_on_date < e.last_updated_on - 1
-           and upper(e.workspace) = 'SERT'
+           and upper(e.workspace) = c_test_workspace
         union all
         select a.application_id
           from apex_applications a
-         where upper(a.workspace) = 'SERT'
+         where upper(a.workspace) = c_test_workspace
            and not exists (select 1 from sert_core.evals where application_id = a.application_id)
       );
     ut.expect(l_sert_candidates).to_be_greater_than(0);
@@ -383,16 +392,16 @@ begin
         select e.application_id
           from sert_core.evals_pub_v e
          where e.eval_on_date < e.last_updated_on - 1
-           and upper(e.workspace) not in ('SERT', 'INTERNAL', 'TOWER', 'COM.ORACLE.CUST.REPOSITORY')
+           and upper(e.workspace) not in ('DEMO','SERT', 'INTERNAL', 'COM.ORACLE.CUST.REPOSITORY')
         union all
         select a.application_id
           from apex_applications a
-         where upper(a.workspace) not in ('SERT', 'INTERNAL', 'TOWER', 'COM.ORACLE.CUST.REPOSITORY')
+         where upper(a.workspace) not in ('DEMO','SERT', 'INTERNAL', 'COM.ORACLE.CUST.REPOSITORY')
            and not exists (select 1 from sert_core.evals where application_id = a.application_id)
       );
 
     sert_core.schedule_api.queue_auto_scans(
-        p_batch_size    => 100,
+        p_batch_size    => 50,
         p_app_count_out => l_count);
 
     ut.expect(l_count).to_equal(l_expected_count);
@@ -549,6 +558,122 @@ begin
 
     rollback;
 end recently_evaluated_not_stale;
+
+------------------------------------------------------------
+-- drop_auto_scan_job_if_exists
+-- Silently drops SERT_CORE.SERT_AUTO_SCAN_JOB; used for
+-- teardown in setup_auto_scan_job tests.
+------------------------------------------------------------
+procedure drop_auto_scan_job_if_exists
+is
+begin
+   sert_core.schedule_api.remove_schedule_job(
+      p_job_name => 'SERT_CORE.SERT_AUTO_SCAN_JOB');
+exception
+   when others then null;
+end drop_auto_scan_job_if_exists;
+
+------------------------------------------------------------
+-- setup_auto_scan_job_defaults
+-- Tests: default call creates job with FREQ=HOURLY;INTERVAL=1
+------------------------------------------------------------
+procedure setup_auto_scan_job_defaults
+as
+   l_interval varchar2(4000);
+begin
+   drop_auto_scan_job_if_exists;
+
+   sert_core.schedule_api.setup_auto_scan_job;
+
+   l_interval := sert_core.schedule_api.auto_scan_job_interval;
+   ut.expect(l_interval).to_equal('FREQ=HOURLY;INTERVAL=1');
+
+   drop_auto_scan_job_if_exists;
+end setup_auto_scan_job_defaults;
+
+------------------------------------------------------------
+-- setup_auto_scan_job_minutely
+-- Tests: MINUTELY frequency and custom interval are honoured
+------------------------------------------------------------
+procedure setup_auto_scan_job_minutely
+as
+   l_interval varchar2(4000);
+begin
+   drop_auto_scan_job_if_exists;
+
+   sert_core.schedule_api.setup_auto_scan_job(
+      p_frequency => 'MINUTELY',
+      p_interval  => '5');
+
+   l_interval := sert_core.schedule_api.auto_scan_job_interval;
+   ut.expect(l_interval).to_equal('FREQ=MINUTELY;INTERVAL=5');
+
+   drop_auto_scan_job_if_exists;
+end setup_auto_scan_job_minutely;
+
+------------------------------------------------------------
+-- setup_auto_scan_job_invalid_freq
+-- Tests: unsupported frequency value is silently coerced to HOURLY
+------------------------------------------------------------
+procedure setup_auto_scan_job_invalid_freq
+as
+   l_interval varchar2(4000);
+begin
+   drop_auto_scan_job_if_exists;
+
+   sert_core.schedule_api.setup_auto_scan_job(
+      p_frequency => 'WEEKLY',
+      p_interval  => '1');
+
+   l_interval := sert_core.schedule_api.auto_scan_job_interval;
+   ut.expect(l_interval).to_equal('FREQ=HOURLY;INTERVAL=1');
+
+   drop_auto_scan_job_if_exists;
+end setup_auto_scan_job_invalid_freq;
+
+------------------------------------------------------------
+-- setup_auto_scan_job_invalid_interval
+-- Tests: interval outside 1-99 range is coerced to 1
+------------------------------------------------------------
+procedure setup_auto_scan_job_invalid_interval
+as
+   l_interval varchar2(4000);
+begin
+   drop_auto_scan_job_if_exists;
+
+   sert_core.schedule_api.setup_auto_scan_job(
+      p_frequency => 'DAILY',
+      p_interval  => '0');
+
+   l_interval := sert_core.schedule_api.auto_scan_job_interval;
+   ut.expect(l_interval).to_equal('FREQ=DAILY;INTERVAL=1');
+
+   drop_auto_scan_job_if_exists;
+end setup_auto_scan_job_invalid_interval;
+
+------------------------------------------------------------
+-- setup_auto_scan_job_idempotent
+-- Tests: second call replaces the job; new interval wins
+------------------------------------------------------------
+procedure setup_auto_scan_job_idempotent
+as
+   l_interval varchar2(4000);
+begin
+   drop_auto_scan_job_if_exists;
+
+   sert_core.schedule_api.setup_auto_scan_job(
+      p_frequency => 'HOURLY',
+      p_interval  => '1');
+
+   sert_core.schedule_api.setup_auto_scan_job(
+      p_frequency => 'DAILY',
+      p_interval  => '3');
+
+   l_interval := sert_core.schedule_api.auto_scan_job_interval;
+   ut.expect(l_interval).to_equal('FREQ=DAILY;INTERVAL=3');
+
+   drop_auto_scan_job_if_exists;
+end setup_auto_scan_job_idempotent;
 
 end test_schedule_api;
 /

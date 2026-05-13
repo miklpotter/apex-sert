@@ -822,6 +822,96 @@ end queue_auto_scans;
 
 
 ----------------------------------------------------------------------------------------------------------------------------
+-- PROCEDURE: S E T U P _ A U T O _ S C A N _ J O B
+----------------------------------------------------------------------------------------------------------------------------
+-- Creates or replaces the SERT_AUTO_SCAN_JOB DBMS_Scheduler job
+----------------------------------------------------------------------------------------------------------------------------
+-- setup_auto_scan_job
+-- purpose: create (or recreate) the SERT_AUTO_SCAN_JOB scheduler job owned by sert_core.
+-- behavior: validates frequency and interval, drops the existing job if present, then creates the new job disabled.
+-- parameters:
+--   p_frequency - MINUTELY, HOURLY (default), or DAILY; any other value silently becomes HOURLY.
+--   p_interval  - 1-99 as a string; values outside that range silently become 1.
+-- usage:
+--   sert_core.schedule_api.setup_auto_scan_job(p_frequency => 'HOURLY', p_interval => '1');
+----------------------------------------------------------------------------------------------------------------------------
+procedure setup_auto_scan_job (
+  p_frequency in varchar2 default 'HOURLY',
+  p_interval  in varchar2 default '1')
+is
+  l_frequency       varchar2(10) := upper(p_frequency);
+  l_interval        varchar2(3)  := p_interval;
+  l_repeat_interval varchar2(100);
+begin
+  if l_frequency not in ('MINUTELY', 'HOURLY', 'DAILY') then
+    l_frequency := 'HOURLY';
+  end if;
+
+  if not regexp_like(l_interval, '^\d{1,2}$') or
+     to_number(l_interval) < 1 or to_number(l_interval) > 99 then
+    l_interval := '1';
+  end if;
+
+  l_repeat_interval := 'FREQ=' || l_frequency || ';INTERVAL=' || l_interval;
+
+  begin
+    dbms_scheduler.drop_job(job_name => 'SERT_AUTO_SCAN_JOB', force => true);
+  exception
+    when others then
+      if sqlcode != -27475 then -- ORA-27475: object does not exist
+        raise;
+      end if;
+  end;
+
+  dbms_scheduler.create_job(
+    job_name        => 'SERT_AUTO_SCAN_JOB',
+    job_type        => 'PLSQL_BLOCK',
+    job_action      => q'!declare
+  l_app_count number;
+begin
+  sert_core.schedule_api.queue_auto_scans(
+    p_app_count_out => l_app_count
+  );
+  sert_core.log_pkg.log(
+    p_log      => 'Auto-scan job completed: ' || l_app_count || ' applications queued',
+    p_log_type => 'INFO'
+  );
+end;
+!',
+    repeat_interval => l_repeat_interval,
+    enabled         => false,
+    comments        => 'Automated scan of stale and unscanned applications, ranked by recent activity'
+  );
+end setup_auto_scan_job;
+
+----------------------------------------------------------------------------------------------------------------------------
+-- FUNCTION: A U T O _ S C A N _ J O B _ I N T E R V A L
+----------------------------------------------------------------------------------------------------------------------------
+-- Returns the repeat_interval of the SERT_AUTO_SCAN_JOB scheduler job
+----------------------------------------------------------------------------------------------------------------------------
+-- auto_scan_job_interval
+-- purpose: expose the current repeat_interval for SERT_AUTO_SCAN_JOB.
+-- behavior: queries user_scheduler_jobs; returns null when the job does not exist.
+-- returns:
+--   varchar2 - repeat_interval string, or null if the job is absent.
+-- usage:
+--   l_interval := sert_core.schedule_api.auto_scan_job_interval;
+----------------------------------------------------------------------------------------------------------------------------
+function auto_scan_job_interval return varchar2
+is
+  l_interval varchar2(4000);
+begin
+  select repeat_interval
+    into l_interval
+    from user_scheduler_jobs
+   where job_name = 'SERT_AUTO_SCAN_JOB';
+  return l_interval;
+exception
+  when no_data_found then
+    return null;
+end auto_scan_job_interval;
+
+----------------------------------------------------------------------------------------------------------------------------
 ----------------------------------------------------------------------------------------------------------------------------
 end schedule_api;
 /

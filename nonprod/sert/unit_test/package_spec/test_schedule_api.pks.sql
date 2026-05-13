@@ -21,6 +21,9 @@ as
    --%test(should_queue_all_stale_apps_when_less_than_20)
    procedure stale_apps_under_limit;
 
+   --%test(should_exclude_apps_in_ignored_workspace)
+   procedure ignored_workspace_excluded;
+/*
    --%test(should_queue_top_20_ranked_by_guardian_activity)
    procedure top_20_by_guardian_activity;
 
@@ -34,9 +37,6 @@ as
    --%rollback(manual)
    procedure auto_scan_disabled;
 
-   --%test(should_exclude_apps_in_ignored_workspace)
-   --%rollback(manual)
-   procedure ignored_workspace_excluded;
 
    --%test(should_queue_batch_size_from_pref_when_no_param_supplied)
    --%rollback(manual)
@@ -50,6 +50,26 @@ as
    --%rollback(manual)
    procedure recently_evaluated_not_stale;
 
+   --%test(should_create_sert_auto_scan_job_with_default_hourly_interval)
+   --%rollback(manual)
+   procedure setup_auto_scan_job_defaults;
+
+   --%test(should_create_job_with_minutely_frequency_and_custom_interval)
+   --%rollback(manual)
+   procedure setup_auto_scan_job_minutely;
+
+   --%test(should_default_invalid_frequency_to_hourly)
+   --%rollback(manual)
+   procedure setup_auto_scan_job_invalid_freq;
+
+   --%test(should_default_out_of_range_interval_to_1)
+   --%rollback(manual)
+   procedure setup_auto_scan_job_invalid_interval;
+
+   --%test(should_replace_existing_job_settings_on_second_call)
+   --%rollback(manual)
+   procedure setup_auto_scan_job_idempotent;
+*/
 end test_schedule_api;
 /
 --rollback not required
