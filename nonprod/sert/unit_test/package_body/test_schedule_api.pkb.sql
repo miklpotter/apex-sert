@@ -16,18 +16,56 @@ c_test_application_id   constant number := 200;
 c_min_test_application_id   constant number := 200;
 c_max_test_application_id   constant number := 230;
 
+-- Pref snapshot collection for Option 3 state restoration.
+-- Uses prefs_api.t_pref_rec; a null pref_key means the row did not exist.
+type t_pref_snap_tab is table of sert_core.prefs_api.t_pref_rec index by pls_integer;
+g_pref_snap t_pref_snap_tab;
+
+------------------------------------------------------------
+-- snap_prefs
+-- Captures current db state of the three prefs that setup_prefs
+-- will overwrite, so restore_prefs can undo them.
+------------------------------------------------------------
+procedure snap_prefs
+as
+begin
+    g_pref_snap.delete;
+    g_pref_snap(1) := sert_core.prefs_api.get_pref('AUTO_SCAN');
+    g_pref_snap(2) := sert_core.prefs_api.get_pref('AUTO_SCAN_BATCH_SIZE');
+    g_pref_snap(3) := sert_core.prefs_api.get_pref('AUTO_SCAN_IGNORE_WS');
+end snap_prefs;
+
+------------------------------------------------------------
+-- restore_prefs
+-- Restores the three prefs that setup_prefs overwrote.
+-- Uses prefs_api.upsert_pref to restore rows that existed.
+-- Commits after restore since it is called in tests where
+-- queue_auto_scans has already issued an implicit commit.
+------------------------------------------------------------
+procedure restore_prefs
+as
+begin
+    for i in 1..g_pref_snap.count loop
+        if g_pref_snap(i).pref_key is not null then
+            sert_core.prefs_api.upsert_pref(g_pref_snap(i));
+        end if;
+    end loop;
+    commit;
+    g_pref_snap.delete;
+end restore_prefs;
 
 ------------------------------------------------------------
 -- setup_prefs
 -- Runs before each test via --%beforeeach.
--- Sets AUTO_SCAN=Y, AUTO_SCAN_BATCH_SIZE=20, AUTO_SCAN_IGNORE_WS=''
--- so every test starts in a known, permissive state.
--- Each test can override individual prefs after this runs.
--- All changes are rolled back by the explicit rollback at test end.
+-- Snapshots current pref state then sets known test values:
+--   AUTO_SCAN=Y, AUTO_SCAN_BATCH_SIZE=20, AUTO_SCAN_IGNORE_WS='~'
+-- Tests that commit (forcing manual state restore) must call
+-- restore_prefs explicitly in their cleanup section.
 ------------------------------------------------------------
 procedure setup_prefs
 as
 begin
+    snap_prefs;
     sert_core.prefs_api.upsert_pref(
         p_pref_name   => 'Auto Scan All Apps',
         p_pref_key    => 'AUTO_SCAN',
@@ -57,7 +95,7 @@ function setup_test_workspace return number
 is
     l_workspace_id number := c_test_workspace_id;
 begin
-    select workspace_id into l_workspace_id from apex_workspaces where workspace = 'DEMO';
+    select workspace_id into l_workspace_id from apex_workspaces where workspace = c_test_workspace;
     -- execute immediate
     --     'insert into apex_workspaces (workspace, workspace_description, workspace_id) values (:1, :2, :3)'
     --   using 'TEST_WORKSPACE_QUEUE_' || abs(c_test_workspace_id),
@@ -81,7 +119,7 @@ is
     l_app_count     number;
 begin
     select count(*) into l_app_count
-    from apex_applications 
+    from apex_applications
     where application_id between c_min_test_application_id and c_max_test_application_id;
 
     ut.expect(l_app_count).to_equal(30);
@@ -113,10 +151,10 @@ begin
        and apex_version = sert_core.prefs_api.pref_value('SERT_APEX_VERSION');
 
     ut.expect(l_rule_set_count).to_be_greater_than(0);
-      
+
     -- Get first available rule_set_id
-    select min(rule_set_id) into l_rule_set_id 
-      from sert_core.rule_sets 
+    select min(rule_set_id) into l_rule_set_id
+      from sert_core.rule_sets
      where rule_set_key = 'SERT-SECURITY'
        and active_yn = 'Y'
        and apex_version = sert_core.prefs_api.pref_value('SERT_APEX_VERSION');
@@ -139,15 +177,15 @@ begin
     return l_eval_id;
 end setup_test_eval;
 
-procedure check_test_apps ( 
+procedure check_test_apps (
     p_workspace_id  in number )
 is
     l_app_count     number;
     l_app_id        number;
     l_eval_id       number;
-begin 
+begin
     select count(*) into l_app_count
-    from apex_applications 
+    from apex_applications
     where application_id between c_min_test_application_id and c_max_test_application_id;
     ut.expect(l_app_count).to_equal(31);
     -- clean out any evals
@@ -173,7 +211,7 @@ procedure no_stale_apps
 as
     l_count         number := 0;
     l_workspace_id  number;
-    l_eval_id       number := 0; 
+    l_eval_id       number := 0;
     l_app_id        number;
 begin
     -- Setup: Create test workspace and one app with no evaluations
@@ -197,8 +235,9 @@ begin
     -- Assert: Should return 1 (the unscanned app)
     ut.expect(l_count).to_equal(1);
 
-    -- Cleanup: Rollback test data
+    -- Cleanup: restore committed pref state; rollback any uncommitted test data
     delete from sert_core.evals where application_id between c_min_test_application_id and c_max_test_application_id;
+    restore_prefs;
     rollback;
 end no_stale_apps;
 
@@ -213,7 +252,7 @@ procedure stale_apps_under_limit
 as
     l_count         number := 0;
     l_workspace_id  number;
-    l_eval_id       number := 0; 
+    l_eval_id       number := 0;
 begin
     -- Setup: Create test workspace and 5 unscanned apps
     l_workspace_id := setup_test_workspace;
@@ -362,7 +401,7 @@ as
     l_expected_count  number;
 begin
     -- Reset evals for all SERT apps so all 3 are unscanned candidates regardless of prior test runs.
-    delete from sert_core.evals 
+    delete from sert_core.evals
     where application_id between c_min_test_application_id and c_max_test_application_id;
 
     sert_core.prefs_api.upsert_pref(

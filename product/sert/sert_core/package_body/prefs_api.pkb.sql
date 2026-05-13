@@ -72,6 +72,37 @@ create or replace package body sert_core.prefs_api as
     end pref_true;
 
     -- -----------------------------------------------------------------------------
+    -- Function: get_pref
+    -- Purpose: Return all upsertable columns for a preference row.
+    --          Returns a null-keyed record when the key does not exist,
+    --          allowing callers to detect absence without a direct table query.
+    -- Parameters:
+    --   p_pref_key - Preference key.
+    -- Returns:
+    --   t_pref_rec with all fields populated, or all-null record if not found.
+    -- Exceptions:
+    --   others - Propagated.
+    -- -----------------------------------------------------------------------------
+    function get_pref (
+        p_pref_key in sert_core.prefs.pref_key%type)
+        return t_pref_rec
+    is
+        l_rec t_pref_rec;
+    begin
+        select pref_name, pref_key, pref_value, internal_yn
+          into l_rec.pref_name, l_rec.pref_key, l_rec.pref_value, l_rec.internal_yn
+          from sert_core.prefs
+         where pref_key = p_pref_key;
+
+        return l_rec;
+    exception
+        when no_data_found then
+            return l_rec;
+        when others then
+            raise;
+    end get_pref;
+
+    -- -----------------------------------------------------------------------------
     -- Procedure: upsert_pref
     -- Purpose: Insert or update a preference row identified by p_pref_key.
     -- Parameters:
@@ -121,6 +152,28 @@ create or replace package body sert_core.prefs_api as
     exception
         when others then
             raise;
+    end upsert_pref;
+
+    -- -----------------------------------------------------------------------------
+    -- Procedure: upsert_pref (overload)
+    -- Purpose: Insert or update a preference row from a t_pref_rec record.
+    --          Delegates to the scalar overload.
+    -- Parameters:
+    --   p_pref - Preference record containing name, key, value, and internal_yn.
+    -- Returns:
+    --   None.
+    -- Exceptions:
+    --   others - Propagated.
+    -- -----------------------------------------------------------------------------
+    procedure upsert_pref (
+        p_pref in t_pref_rec)
+    is
+    begin
+        upsert_pref(
+            p_pref_name   => p_pref.pref_name,
+            p_pref_key    => p_pref.pref_key,
+            p_pref_value  => p_pref.pref_value,
+            p_internal_yn => p_pref.internal_yn);
     end upsert_pref;
 
 end prefs_api;
