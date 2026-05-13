@@ -1,0 +1,346 @@
+begin
+    apex_application_install.set_workspace('DEMO');
+end;
+/
+-- Run the exported application SQL file
+
+declare
+    l_app_id number := 200;
+begin
+    apex_application_install.set_application_id(l_app_id);
+    apex_application_install.generate_offset;
+    apex_application_install.set_application_name('demo'||l_app_id);
+    apex_application_install.set_application_alias('DEMO'||l_app_id);
+end;
+/
+@apex_demo_app_103.sql
+--
+declare
+    l_app_id number := 201;
+begin
+    apex_application_install.set_application_id(l_app_id);
+    apex_application_install.generate_offset;
+    apex_application_install.set_application_name('demo'||l_app_id);
+    apex_application_install.set_application_alias('DEMO'||l_app_id);
+end;
+/
+@apex_demo_app_103.sql
+--
+declare
+    l_app_id number := 202;
+begin
+    apex_application_install.set_application_id(l_app_id);
+    apex_application_install.generate_offset;
+    apex_application_install.set_application_name('demo'||l_app_id);
+    apex_application_install.set_application_alias('DEMO'||l_app_id);
+end;
+/
+@apex_demo_app_103.sql
+--
+declare
+    l_app_id number := 203;
+begin
+    apex_application_install.set_application_id(l_app_id);
+    apex_application_install.generate_offset;
+    apex_application_install.set_application_name('demo'||l_app_id);
+    apex_application_install.set_application_alias('DEMO'||l_app_id);
+end;
+/
+@apex_demo_app_103.sql
+--
+declare
+    l_app_id number := 204;
+begin
+    apex_application_install.set_application_id(l_app_id);
+    apex_application_install.generate_offset;
+    apex_application_install.set_application_name('demo'||l_app_id);
+    apex_application_install.set_application_alias('DEMO'||l_app_id);
+end;
+/
+@apex_demo_app_103.sql
+--
+declare
+    l_app_id number := 205;
+begin
+    apex_application_install.set_application_id(l_app_id);
+    apex_application_install.generate_offset;
+    apex_application_install.set_application_name('demo'||l_app_id);
+    apex_application_install.set_application_alias('DEMO'||l_app_id);
+end;
+/
+@apex_demo_app_103.sql
+--
+declare
+    l_app_id number := 206;
+begin
+    apex_application_install.set_application_id(l_app_id);
+    apex_application_install.generate_offset;
+    apex_application_install.set_application_name('demo'||l_app_id);
+    apex_application_install.set_application_alias('DEMO'||l_app_id);
+end;
+/
+@apex_demo_app_103.sql
+--
+declare
+    l_app_id number := 207;
+begin
+    apex_application_install.set_application_id(l_app_id);
+    apex_application_install.generate_offset;
+    apex_application_install.set_application_name('demo'||l_app_id);
+    apex_application_install.set_application_alias('DEMO'||l_app_id);
+end;
+/
+@apex_demo_app_103.sql
+--
+declare
+    l_app_id number := 208;
+begin
+    apex_application_install.set_application_id(l_app_id);
+    apex_application_install.generate_offset;
+    apex_application_install.set_application_name('demo'||l_app_id);
+    apex_application_install.set_application_alias('DEMO'||l_app_id);
+end;
+/
+@apex_demo_app_103.sql
+--
+declare
+    l_app_id number := 209;
+begin
+    apex_application_install.set_application_id(l_app_id);
+    apex_application_install.generate_offset;
+    apex_application_install.set_application_name('demo'||l_app_id);
+    apex_application_install.set_application_alias('DEMO'||l_app_id);
+end;
+/
+@apex_demo_app_103.sql
+--
+declare
+    l_app_id number := 210;
+begin
+    apex_application_install.set_application_id(l_app_id);
+    apex_application_install.generate_offset;
+    apex_application_install.set_application_name('demo'||l_app_id);
+    apex_application_install.set_application_alias('DEMO'||l_app_id);
+end;
+/
+@apex_demo_app_103.sql
+--
+declare
+    l_app_id number := 211;
+begin
+    apex_application_install.set_application_id(l_app_id);
+    apex_application_install.generate_offset;
+    apex_application_install.set_application_name('demo'||l_app_id);
+    apex_application_install.set_application_alias('DEMO'||l_app_id);
+end;
+/
+@apex_demo_app_103.sql
+--
+declare
+    l_app_id number := 212;
+begin
+    apex_application_install.set_application_id(l_app_id);
+    apex_application_install.generate_offset;
+    apex_application_install.set_application_name('demo'||l_app_id);
+    apex_application_install.set_application_alias('DEMO'||l_app_id);
+end;
+/
+@apex_demo_app_103.sql
+--
+declare
+    l_app_id number := 213;
+begin
+    apex_application_install.set_application_id(l_app_id);
+    apex_application_install.generate_offset;
+    apex_application_install.set_application_name('demo'||l_app_id);
+    apex_application_install.set_application_alias('DEMO'||l_app_id);
+end;
+/
+@apex_demo_app_103.sql
+--
+declare
+    l_app_id number := 214;
+begin
+    apex_application_install.set_application_id(l_app_id);
+    apex_application_install.generate_offset;
+    apex_application_install.set_application_name('demo'||l_app_id);
+    apex_application_install.set_application_alias('DEMO'||l_app_id);
+end;
+/
+@apex_demo_app_103.sql
+--
+declare
+    l_app_id number := 215;
+begin
+    apex_application_install.set_application_id(l_app_id);
+    apex_application_install.generate_offset;
+    apex_application_install.set_application_name('demo'||l_app_id);
+    apex_application_install.set_application_alias('DEMO'||l_app_id);
+end;
+/
+@apex_demo_app_103.sql
+--
+declare
+    l_app_id number := 216;
+begin
+    apex_application_install.set_application_id(l_app_id);
+    apex_application_install.generate_offset;
+    apex_application_install.set_application_name('demo'||l_app_id);
+    apex_application_install.set_application_alias('DEMO'||l_app_id);
+end;
+/
+@apex_demo_app_103.sql
+--
+declare
+    l_app_id number := 217;
+begin
+    apex_application_install.set_application_id(l_app_id);
+    apex_application_install.generate_offset;
+    apex_application_install.set_application_name('demo'||l_app_id);
+    apex_application_install.set_application_alias('DEMO'||l_app_id);
+end;
+/
+@apex_demo_app_103.sql
+--
+declare
+    l_app_id number := 218;
+begin
+    apex_application_install.set_application_id(l_app_id);
+    apex_application_install.generate_offset;
+    apex_application_install.set_application_name('demo'||l_app_id);
+    apex_application_install.set_application_alias('DEMO'||l_app_id);
+end;
+/
+@apex_demo_app_103.sql
+--
+declare
+    l_app_id number := 219;
+begin
+    apex_application_install.set_application_id(l_app_id);
+    apex_application_install.generate_offset;
+    apex_application_install.set_application_name('demo'||l_app_id);
+    apex_application_install.set_application_alias('DEMO'||l_app_id);
+end;
+/
+@apex_demo_app_103.sql
+--
+declare
+    l_app_id number := 220;
+begin
+    apex_application_install.set_application_id(l_app_id);
+    apex_application_install.generate_offset;
+    apex_application_install.set_application_name('demo'||l_app_id);
+    apex_application_install.set_application_alias('DEMO'||l_app_id);
+end;
+/
+@apex_demo_app_103.sql
+--
+declare
+    l_app_id number := 221;
+begin
+    apex_application_install.set_application_id(l_app_id);
+    apex_application_install.generate_offset;
+    apex_application_install.set_application_name('demo'||l_app_id);
+    apex_application_install.set_application_alias('DEMO'||l_app_id);
+end;
+/
+@apex_demo_app_103.sql
+--
+declare
+    l_app_id number := 222;
+begin
+    apex_application_install.set_application_id(l_app_id);
+    apex_application_install.generate_offset;
+    apex_application_install.set_application_name('demo'||l_app_id);
+    apex_application_install.set_application_alias('DEMO'||l_app_id);
+end;
+/
+@apex_demo_app_103.sql
+--
+declare
+    l_app_id number := 223;
+begin
+    apex_application_install.set_application_id(l_app_id);
+    apex_application_install.generate_offset;
+    apex_application_install.set_application_name('demo'||l_app_id);
+    apex_application_install.set_application_alias('DEMO'||l_app_id);
+end;
+/
+@apex_demo_app_103.sql
+--
+declare
+    l_app_id number := 224;
+begin
+    apex_application_install.set_application_id(l_app_id);
+    apex_application_install.generate_offset;
+    apex_application_install.set_application_name('demo'||l_app_id);
+    apex_application_install.set_application_alias('DEMO'||l_app_id);
+end;
+/
+@apex_demo_app_103.sql
+--
+declare
+    l_app_id number := 225;
+begin
+    apex_application_install.set_application_id(l_app_id);
+    apex_application_install.generate_offset;
+    apex_application_install.set_application_name('demo'||l_app_id);
+    apex_application_install.set_application_alias('DEMO'||l_app_id);
+end;
+/
+@apex_demo_app_103.sql
+--
+declare
+    l_app_id number := 226;
+begin
+    apex_application_install.set_application_id(l_app_id);
+    apex_application_install.generate_offset;
+    apex_application_install.set_application_name('demo'||l_app_id);
+    apex_application_install.set_application_alias('DEMO'||l_app_id);
+end;
+/
+@apex_demo_app_103.sql
+--
+declare
+    l_app_id number := 227;
+begin
+    apex_application_install.set_application_id(l_app_id);
+    apex_application_install.generate_offset;
+    apex_application_install.set_application_name('demo'||l_app_id);
+    apex_application_install.set_application_alias('DEMO'||l_app_id);
+end;
+/
+@apex_demo_app_103.sql
+--
+declare
+    l_app_id number := 228;
+begin
+    apex_application_install.set_application_id(l_app_id);
+    apex_application_install.generate_offset;
+    apex_application_install.set_application_name('demo'||l_app_id);
+    apex_application_install.set_application_alias('DEMO'||l_app_id);
+end;
+/
+@apex_demo_app_103.sql
+--
+declare
+    l_app_id number := 229;
+begin
+    apex_application_install.set_application_id(l_app_id);
+    apex_application_install.generate_offset;
+    apex_application_install.set_application_name('demo'||l_app_id);
+    apex_application_install.set_application_alias('DEMO'||l_app_id);
+end;
+/
+@apex_demo_app_103.sql
+--
+declare
+    l_app_id number := 230;
+begin
+    apex_application_install.set_application_id(l_app_id);
+    apex_application_install.generate_offset;
+    apex_application_install.set_application_name('demo'||l_app_id);
+    apex_application_install.set_application_alias('DEMO'||l_app_id);
+end;
+/
+@apex_demo_app_103.sql
