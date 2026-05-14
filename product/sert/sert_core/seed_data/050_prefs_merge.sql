@@ -90,6 +90,19 @@ end;
 /
 --rollback not required
 
+--changeset mipotter:prefs_merge_DELETE_EVAL_EXCEPTIONS endDelimiter:/ runOnChange:true runAlways:false rollbackEndDelimiter:/ stripComments:false
+declare
+  l_value varchar2(250) := 'N';
+begin
+  sert_core.prefs_api.upsert_pref(
+      p_pref_name   => 'Automatically Delete comments and exceptions when deleting an evaluation',
+      p_pref_key    => 'DELETE_EVAL_EXCEPTIONS',
+      p_pref_value  => l_value,
+      p_internal_yn => 'N');
+end;
+/
+--rollback not required
+
 --changeset mipotter:050_prefs_merge_auto_scan_ignore_ws endDelimiter:/ runOnChange:true runAlways:false rollbackEndDelimiter:/ stripComments:false
 declare
   l_value varchar2(250) := '${sert_auto_scan_ignore_ws}';
@@ -104,18 +117,6 @@ begin
   sert_core.prefs_api.upsert_pref(
       p_pref_name   => 'Ignore Workspaces for auto Scan',
       p_pref_key    => 'AUTO_SCAN_IGNORE_WS',
-      p_pref_value  => l_value,
-      p_internal_yn => 'N');
-end;
-/
---rollback not required
---changeset mipotter:prefs_merge_DELETE_EVAL_EXCEPTIONS endDelimiter:/ runOnChange:true runAlways:false rollbackEndDelimiter:/ stripComments:false
-declare
-  l_value varchar2(250) := 'N';
-begin
-  sert_core.prefs_api.upsert_pref(
-      p_pref_name   => 'Automatically Delete comments and exceptions when deleting an evaluation',
-      p_pref_key    => 'DELETE_EVAL_EXCEPTIONS',
       p_pref_value  => l_value,
       p_internal_yn => 'N');
 end;
