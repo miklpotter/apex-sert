@@ -16,9 +16,6 @@ c_test_application_id   constant number := 200;
 c_min_test_application_id   constant number := 200;
 c_max_test_application_id   constant number := 230;
 
--- Pref snapshot collection for Option 3 state restoration.
--- Uses prefs_api.t_pref_rec; a null pref_key means the row did not exist.
-type t_pref_snap_tab is table of sert_core.prefs_api.t_pref_rec index by pls_integer;
 g_pref_snap t_pref_snap_tab;
 
 ------------------------------------------------------------
@@ -96,11 +93,6 @@ is
     l_workspace_id number := c_test_workspace_id;
 begin
     select workspace_id into l_workspace_id from apex_workspaces where workspace = c_test_workspace;
-    -- execute immediate
-    --     'insert into apex_workspaces (workspace, workspace_description, workspace_id) values (:1, :2, :3)'
-    --   using 'TEST_WORKSPACE_QUEUE_' || abs(c_test_workspace_id),
-    --         'Test workspace for queue_auto_scans',
-    --         c_test_workspace_id;
     return l_workspace_id;
 end setup_test_workspace;
 
@@ -217,28 +209,16 @@ begin
     -- Setup: Create test workspace and one app with no evaluations
     l_workspace_id := setup_test_workspace;
     check_test_apps(l_workspace_id);
-    -- it is necessary to have applications prebuilt from ID c_min_test_application_id-c_max_test_application_id
-    -- first make sure no evals exists
-    -- now configure evals for all bar ONE app (200)
-    -- delete from sert_core.evals where application_id between c_min_test_application_id and c_max_test_application_id;
-    -- for l_app_id in (c_min_test_application_id+1)..c_max_test_application_id loop
-    --     l_eval_id := setup_test_eval(
-    --         p_workspace_id => l_workspace_id,
-    --         p_app_id       => l_app_id,
-    --         p_eval_date    => sysdate);
-    -- end loop; -- for l_app_id
 
     sert_core.schedule_api.queue_auto_scans(
         p_batch_size => 10,
         p_app_count_out => l_count);
 
+    -- Cleanup: restore committed pref state; rollback any uncommitted test data
+    delete from sert_core.evals where application_id between c_min_test_application_id and c_max_test_application_id;
     -- Assert: Should return 1 (the unscanned app)
     ut.expect(l_count).to_equal(1);
 
-    -- Cleanup: restore committed pref state; rollback any uncommitted test data
-    delete from sert_core.evals where application_id between c_min_test_application_id and c_max_test_application_id;
-    restore_prefs;
-    rollback;
 end no_stale_apps;
 
 ------------------------------------------------------------
@@ -272,14 +252,73 @@ begin
         p_batch_size => 20,
         p_app_count_out => l_count);
 
+    delete from sert_core.evals where application_id between c_min_test_application_id and c_max_test_application_id;
     -- Assert: Should return 5 (all 5 unscanned apps)
     ut.expect(l_count).to_equal(5);
 
-    -- Cleanup: Rollback test data
-    rollback;
-    delete from sert_core.evals where application_id between c_min_test_application_id and c_max_test_application_id;
-
 end stale_apps_under_limit;
+
+------------------------------------------------------------
+-- ignored_workspace_excluded
+-- Tests: apps in the ignored workspace are not queued
+-- Setup: set AUTO_SCAN_IGNORE_WS = 'SERT'; verify SERT has
+--        candidates so the filter has a real effect; compute
+--        expected count as non-SERT non-APEX-system candidates
+-- Execute: queue_auto_scans(p_batch_size => 100)
+-- Assert: count = non-SERT candidates (SERT apps excluded)
+------------------------------------------------------------
+procedure ignored_workspace_excluded
+as
+    l_count           number;
+    l_sert_candidates number;
+    l_expected_count  number;
+begin
+    -- Reset evals for all SERT apps so all 3 are unscanned candidates regardless of prior test runs.
+    delete from sert_core.evals
+    where application_id between c_min_test_application_id and c_max_test_application_id;
+
+    sert_core.prefs_api.upsert_pref(
+        p_pref_name   => 'Ignore Workspaces for auto Scan',
+        p_pref_key    => 'AUTO_SCAN_IGNORE_WS',
+        p_pref_value  => 'SERT,DEMO',
+        p_internal_yn => 'N');
+
+    -- Precondition: c_test_workspace must have at least one candidate (filter has real effect)
+    select count(*) into l_sert_candidates
+      from (
+        select e.application_id
+          from sert_core.evals_pub_v e
+         where e.eval_on_date < e.last_updated_on - 1
+           and upper(e.workspace) = c_test_workspace
+        union all
+        select a.application_id
+          from apex_applications a
+         where upper(a.workspace) = c_test_workspace
+           and not exists (select 1 from sert_core.evals where application_id = a.application_id)
+      );
+    ut.expect(l_sert_candidates).to_be_greater_than(0);
+
+    -- Expected: unscanned/stale apps not in SERT or APEX-system workspaces
+    select count(*) into l_expected_count
+      from (
+        select e.application_id
+          from sert_core.evals_pub_v e
+         where e.eval_on_date < e.last_updated_on - 1
+           and upper(e.workspace) not in ('DEMO','SERT', 'INTERNAL', 'COM.ORACLE.CUST.REPOSITORY')
+        union all
+        select a.application_id
+          from apex_applications a
+         where upper(a.workspace) not in ('DEMO','SERT', 'INTERNAL', 'COM.ORACLE.CUST.REPOSITORY')
+           and not exists (select 1 from sert_core.evals where application_id = a.application_id)
+      );
+
+    sert_core.schedule_api.queue_auto_scans(
+        p_batch_size    => 50,
+        p_app_count_out => l_count);
+
+    delete from sert_core.evals where application_id between c_min_test_application_id and c_max_test_application_id;
+    ut.expect(l_count).to_equal(l_expected_count);
+end ignored_workspace_excluded;
 
 -- =============================================================================================
 -- to be completed below
@@ -384,69 +423,6 @@ begin
 
     rollback;
 end auto_scan_disabled;
-
-------------------------------------------------------------
--- ignored_workspace_excluded
--- Tests: apps in the ignored workspace are not queued
--- Setup: set AUTO_SCAN_IGNORE_WS = 'SERT'; verify SERT has
---        candidates so the filter has a real effect; compute
---        expected count as non-SERT non-APEX-system candidates
--- Execute: queue_auto_scans(p_batch_size => 100)
--- Assert: count = non-SERT candidates (SERT apps excluded)
-------------------------------------------------------------
-procedure ignored_workspace_excluded
-as
-    l_count           number;
-    l_sert_candidates number;
-    l_expected_count  number;
-begin
-    -- Reset evals for all SERT apps so all 3 are unscanned candidates regardless of prior test runs.
-    delete from sert_core.evals
-    where application_id between c_min_test_application_id and c_max_test_application_id;
-
-    sert_core.prefs_api.upsert_pref(
-        p_pref_name   => 'Ignore Workspaces for auto Scan',
-        p_pref_key    => 'AUTO_SCAN_IGNORE_WS',
-        p_pref_value  => 'SERT,DEMO',
-        p_internal_yn => 'N');
-
-    -- Precondition: c_test_workspace must have at least one candidate (filter has real effect)
-    select count(*) into l_sert_candidates
-      from (
-        select e.application_id
-          from sert_core.evals_pub_v e
-         where e.eval_on_date < e.last_updated_on - 1
-           and upper(e.workspace) = c_test_workspace
-        union all
-        select a.application_id
-          from apex_applications a
-         where upper(a.workspace) = c_test_workspace
-           and not exists (select 1 from sert_core.evals where application_id = a.application_id)
-      );
-    ut.expect(l_sert_candidates).to_be_greater_than(0);
-
-    -- Expected: unscanned/stale apps not in SERT or APEX-system workspaces
-    select count(*) into l_expected_count
-      from (
-        select e.application_id
-          from sert_core.evals_pub_v e
-         where e.eval_on_date < e.last_updated_on - 1
-           and upper(e.workspace) not in ('DEMO','SERT', 'INTERNAL', 'COM.ORACLE.CUST.REPOSITORY')
-        union all
-        select a.application_id
-          from apex_applications a
-         where upper(a.workspace) not in ('DEMO','SERT', 'INTERNAL', 'COM.ORACLE.CUST.REPOSITORY')
-           and not exists (select 1 from sert_core.evals where application_id = a.application_id)
-      );
-
-    sert_core.schedule_api.queue_auto_scans(
-        p_batch_size    => 50,
-        p_app_count_out => l_count);
-
-    ut.expect(l_count).to_equal(l_expected_count);
-
-    rollback;
-end ignored_workspace_excluded;
 
 ------------------------------------------------------------
 -- batch_size_from_pref

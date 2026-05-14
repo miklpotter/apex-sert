@@ -8,20 +8,36 @@
 --changeset mipotter:create_spec_unit_test.test_schedule_api_1777984399 stripComments:false endDelimiter:/ runOnChange:true runAlways:false rollbackEndDelimiter:/
 create or replace package unit_test.test_schedule_api
 as
+-- Pref snapshot collection for Option 3 state restoration.
+-- Uses prefs_api.t_pref_rec; a null pref_key means the row did not exist.
+type t_pref_snap_tab is table of sert_core.prefs_api.t_pref_rec index by pls_integer;
 
    --%suite(schedule_api.queue_auto_scans)
    --%suitepath(sert_core)
 
    --%beforeeach
    procedure setup_prefs;
+   ------------------------------------------------------------
+   -- restore_prefs
+   -- Restores the three prefs that setup_prefs overwrote.
+   -- Uses prefs_api.upsert_pref to restore rows that existed.
+   -- Commits after restore since it is called in tests where
+   -- queue_auto_scans has already issued an implicit commit.
+   ------------------------------------------------------------
+   --%aftereach
+   --%rollback(manual)
+   procedure restore_prefs;
 
    --%test(should_return_0_when_no_stale_or_unscanned_apps)
+   --%rollback(manual)
    procedure no_stale_apps;
 
    --%test(should_queue_all_stale_apps_when_less_than_20)
+   --%rollback(manual)
    procedure stale_apps_under_limit;
 
    --%test(should_exclude_apps_in_ignored_workspace)
+   --%rollback(manual)
    procedure ignored_workspace_excluded;
 /*
    --%test(should_queue_top_20_ranked_by_guardian_activity)
