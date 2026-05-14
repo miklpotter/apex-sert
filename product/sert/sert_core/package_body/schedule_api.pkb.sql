@@ -864,7 +864,7 @@ begin
   end;
 
   dbms_scheduler.create_job(
-    job_name        => 'SERT_AUTO_SCAN_JOB',
+    job_name        => 'SERT_CORE.SERT_AUTO_SCAN_JOB',
     job_type        => 'PLSQL_BLOCK',
     job_action      => q'!declare
   l_app_count number;
