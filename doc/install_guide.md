@@ -355,6 +355,18 @@ end;
 > [!TIP]
 > To disable the job at any time without removing it, run `dbms_scheduler.disable('SERT_AUTO_SCAN_JOB');`. To remove it entirely, run `dbms_scheduler.drop_job('SERT_AUTO_SCAN_JOB');`.
 
+to recreate the scanning job post installation: 
+
+```sql
+begin
+  sert_core.schedule_api.setup_auto_scan_job(
+    p_frequency => 'HOURLY', -- 'MINUTELY'|'HOURLY'|'DAILY
+    p_interval  => '1' -- 1..99
+  );
+  null;
+end;
+/
+```
 ## 4 Uninstall APEX-SERT
 
 to uninstall APEX-SERT, you can simply execute the uninstall script to remove APEX-SERT, it's workspace, menu extension, schema and all liquibase logs.
