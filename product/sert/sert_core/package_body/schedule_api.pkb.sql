@@ -879,7 +879,7 @@ begin
 end;
 !',
     repeat_interval => l_repeat_interval,
-    enabled         => false,
+    enabled         => true,
     comments        => 'Automated scan of stale and unscanned applications, ranked by recent activity'
   );
 end setup_auto_scan_job;
