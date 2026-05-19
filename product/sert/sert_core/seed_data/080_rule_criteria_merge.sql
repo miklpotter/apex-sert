@@ -141,7 +141,6 @@ select count(*)
 from string
 where REGEXP_LIKE((string.s), '&[[:alnum:]]+.', 'ix')
 and regexp_instr (s, '([^[:alnum:]_])(&[[:alpha:]][_[:alnum:]]*\.)', 1, 1, 0, 'i',1 ) > 0"';
-[_}*[[:alnum:]]
 
   sert_core.rule_criteria_api.upsert_rule_criteria (
         p_rule_criteria_name      => l_rule_criteria_name ,
